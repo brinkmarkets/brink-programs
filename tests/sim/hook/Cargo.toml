@@ -1,0 +1,27 @@
+[package]
+name = "brink_sim_hook"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Re-entrancy probe hook for the Brink simulation harness: tries to CPI back into swap_amm and to write the read-only pool"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+name = "brink_sim_hook"
+
+[dependencies]
+solana-program-entrypoint = "3.1"
+solana-account-info = "3.1"
+solana-msg = "3.1"
+solana-cpi = "3.1"
+solana-instruction = "3.4"
+solana-pubkey = "3.0"
+solana-program-error = "3.0"
+
+[profile.release]
+opt-level = 3
+overflow-checks = true
+lto = "fat"
+codegen-units = 1

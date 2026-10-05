@@ -1,0 +1,1179 @@
+{
+  "address": "J2udZ8xzSsETsrSnbW3DeLFBTVooKRup3P7LWKSRwuvS",
+  "metadata": {
+    "name": "brink_index",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink benchmark index: publishes guarded floating-rate benchmarks (value, EMA, cumulative accrual) for the swap AMM"
+  },
+  "instructions": [
+    {
+      "name": "create_benchmark",
+      "docs": [
+        "Creates a benchmark with its guard parameters. The first accepted median seeds the EMA."
+      ],
+      "discriminator": [
+        169,
+        76,
+        102,
+        149,
+        128,
+        66,
+        86,
+        74
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "benchmark",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  101,
+                  110,
+                  99,
+                  104,
+                  109,
+                  97,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "args.id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateBenchmarkArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialise",
+      "docs": [
+        "Creates the registry: `authority` governs (the timelock PDA after bootstrap), `guardian` may only",
+        "tighten (remove a publisher), `publishers` post observations. Only the program's upgrade authority may",
+        "pay for and perform the creation (review finding F-14). A quorum below two is a devnet-only setting and",
+        "is recorded permanently in `single_publisher`."
+      ],
+      "discriminator": [
+        162,
+        198,
+        118,
+        235,
+        215,
+        247,
+        25,
+        118
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "The deployer: must be this program's upgrade authority (F-14)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "This program's own `ProgramData`; binds `payer` to the upgrade authority so the singleton cannot be",
+            "front-run by the first caller after deployment."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitialiseArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "publish",
+      "docs": [
+        "Posts one publisher's observation and, when at least `quorum` fresh observations agree, moves the",
+        "benchmark to their median subject to the band and the drift bound. Never rejected for being out of band:",
+        "the value is clamped and flagged instead. Rejected only above the hard ceiling or when this publisher",
+        "posts more often than `min_interval_slots`."
+      ],
+      "discriminator": [
+        129,
+        177,
+        182,
+        160,
+        184,
+        224,
+        219,
+        5
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "benchmark"
+          ]
+        },
+        {
+          "name": "publisher",
+          "docs": [
+            "Any registered publisher; membership is checked in the handler."
+          ],
+          "signer": true
+        },
+        {
+          "name": "benchmark",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  101,
+                  110,
+                  99,
+                  104,
+                  109,
+                  97,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "benchmark.id",
+                "account": "Benchmark"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "value_bp",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "remove_publisher",
+      "docs": [
+        "Tightening (immediate): the authority or the guardian removes one publisher. The quorum is unchanged, so",
+        "removal can only make the benchmark harder to move, never easier; if fewer publishers than the quorum",
+        "remain the benchmark goes stale until `set_publishers` runs through the delayed path."
+      ],
+      "discriminator": [
+        91,
+        64,
+        158,
+        101,
+        76,
+        157,
+        68,
+        102
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "publisher",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_authority",
+      "docs": [
+        "Governance: hands the registry to a new authority, which co-signs so a mistyped key cannot take it.",
+        "When the new authority is the timelock PDA the transfer is executed through a timelock `Invoke`, which",
+        "makes the PDA a signer by construction."
+      ],
+      "discriminator": [
+        133,
+        250,
+        37,
+        21,
+        110,
+        163,
+        26,
+        121
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        },
+        {
+          "name": "new_authority",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_guardian",
+      "docs": [
+        "Governance (delayed path): rotates the guardian key."
+      ],
+      "discriminator": [
+        147,
+        243,
+        50,
+        121,
+        154,
+        164,
+        50,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "guardian",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_guards",
+      "docs": [
+        "Governance (delayed path): sets the guards within the floors and ceilings."
+      ],
+      "discriminator": [
+        203,
+        250,
+        26,
+        87,
+        124,
+        253,
+        90,
+        74
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "benchmark"
+          ]
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "guards",
+          "type": {
+            "defined": {
+              "name": "GuardArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_publishers",
+      "docs": [
+        "Governance (delayed path): replaces the publisher set and quorum. A quorum below two is only accepted on",
+        "a registry created with `allow_single_publisher`."
+      ],
+      "discriminator": [
+        66,
+        17,
+        107,
+        83,
+        48,
+        94,
+        160,
+        219
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "publishers",
+          "type": {
+            "array": [
+              "pubkey",
+              5
+            ]
+          }
+        },
+        {
+          "name": "quorum",
+          "type": "u8"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Benchmark",
+      "discriminator": [
+        57,
+        252,
+        33,
+        54,
+        113,
+        141,
+        233,
+        247
+      ]
+    },
+    {
+      "name": "Registry",
+      "discriminator": [
+        47,
+        174,
+        110,
+        246,
+        184,
+        182,
+        252,
+        218
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BenchmarkCreated",
+      "discriminator": [
+        209,
+        27,
+        181,
+        140,
+        8,
+        209,
+        54,
+        142
+      ]
+    },
+    {
+      "name": "ObservationRecorded",
+      "discriminator": [
+        233,
+        242,
+        174,
+        139,
+        15,
+        36,
+        175,
+        196
+      ]
+    },
+    {
+      "name": "Published",
+      "discriminator": [
+        209,
+        213,
+        222,
+        168,
+        97,
+        205,
+        86,
+        206
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "BadGuard",
+      "msg": "guard parameter outside its floor and ceiling"
+    },
+    {
+      "code": 6001,
+      "name": "BadId",
+      "msg": "benchmark id must be non-zero"
+    },
+    {
+      "code": 6002,
+      "name": "RateCeiling",
+      "msg": "rate above the hard ceiling"
+    },
+    {
+      "code": 6003,
+      "name": "TooFrequent",
+      "msg": "publish arrived before min_interval_slots elapsed"
+    },
+    {
+      "code": 6004,
+      "name": "OutOfBand",
+      "msg": "observation outside the EMA band"
+    },
+    {
+      "code": 6005,
+      "name": "ClockWentBackwards",
+      "msg": "clock went backwards"
+    },
+    {
+      "code": 6006,
+      "name": "Overflow",
+      "msg": "arithmetic overflow"
+    },
+    {
+      "code": 6007,
+      "name": "NotUpgradeAuthority",
+      "msg": "only the program's upgrade authority may initialise"
+    },
+    {
+      "code": 6008,
+      "name": "NotAPublisher",
+      "msg": "signer is not a registered publisher"
+    },
+    {
+      "code": 6009,
+      "name": "DuplicatePublisher",
+      "msg": "publishers must be distinct"
+    },
+    {
+      "code": 6010,
+      "name": "BadQuorum",
+      "msg": "quorum must be between 1 and the publisher count, and at least 2 unless the registry allows one"
+    },
+    {
+      "code": 6011,
+      "name": "GuardianScope",
+      "msg": "guardian must differ from the authority and be non-zero"
+    },
+    {
+      "code": 6012,
+      "name": "Unauthorised",
+      "msg": "signer is not permitted to do this"
+    }
+  ],
+  "types": [
+    {
+      "name": "Benchmark",
+      "docs": [
+        "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
+        "`version`; both programs upgrade together when it changes."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "ema_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "unix_ts",
+            "type": "i64"
+          },
+          {
+            "name": "accrual_e18",
+            "type": "u128"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "band_bp",
+            "type": "u16"
+          },
+          {
+            "name": "half_life_slots",
+            "type": "u64"
+          },
+          {
+            "name": "min_interval_slots",
+            "type": "u64"
+          },
+          {
+            "name": "published",
+            "type": "bool"
+          },
+          {
+            "name": "publish_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "prev_value_bp",
+            "docs": [
+              "Value held over the most recent accrual segment `[prev_unix_ts, unix_ts]` (maths finding M-2)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "prev_unix_ts",
+            "docs": [
+              "Start of the most recent accrual segment; equals `unix_ts` until the second accepted value."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "max_drift_bp",
+            "docs": [
+              "Drift bound (S-6): the value may move at most this far from `drift_anchor_bp` within one window."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "drift_window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "drift_anchor_bp",
+            "type": "u16"
+          },
+          {
+            "name": "drift_anchor_slot",
+            "type": "u64"
+          },
+          {
+            "name": "clamped",
+            "docs": [
+              "The last accepted value was clamped by the band or the drift bound."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "disputed",
+            "docs": [
+              "The last aggregation had a quorum of fresh observations that did not agree; the value was not moved."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "support",
+            "docs": [
+              "Observations that supported the last accepted value. `1` means a single-publisher (devnet) registry."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "observations",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Observation"
+                  }
+                },
+                5
+              ]
+            }
+          },
+          {
+            "name": "ema_milli_bp",
+            "docs": [
+              "EMA at bp x 1 000 (maths finding M-6). `ema_bp` is `rhu(ema_milli_bp / 1 000)`; at most",
+              "`MAX_RATE_BP x 1 000`, so it fits `u32` and the `u16` narrowing of `ema_bp` cannot fail."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_first_day",
+            "docs": [
+              "UTC day number (unix seconds / 86 400) of the oldest fixing ever written; 0 until the first midnight the",
+              "benchmark lives through."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_head_day",
+            "docs": [
+              "UTC day number of the most recent fixing written."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixings",
+            "docs": [
+              "Ring of `FIXING_DAYS` daily fixings: the cumulative accrual (`accrual_e18` units) at 00:00 UTC of day `d`",
+              "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
+              "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
+              "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                2048
+              ]
+            }
+          },
+          {
+            "name": "ema_slot",
+            "docs": [
+              "Slot at which the EMA last moved (or was confirmed equal to its input); the decay of the next step is",
+              "measured from here, not from the last publication (M-11)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accepted_slot",
+            "docs": [
+              "Slot of the transaction that last accepted a value. `slot` is the freshness of the data behind it (M-12);",
+              "this is when the benchmark itself last moved, used to widen the band after an outage."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                12
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BenchmarkCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreateBenchmarkArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "guards",
+            "type": {
+              "defined": {
+                "name": "GuardArgs"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "band_bp",
+            "type": "u16"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "half_life_slots",
+            "type": "u64"
+          },
+          {
+            "name": "min_interval_slots",
+            "type": "u64"
+          },
+          {
+            "name": "max_drift_bp",
+            "type": "u16"
+          },
+          {
+            "name": "drift_window_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitialiseArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "publishers",
+            "type": {
+              "array": [
+                "pubkey",
+                5
+              ]
+            }
+          },
+          {
+            "name": "quorum",
+            "type": "u8"
+          },
+          {
+            "name": "allow_single_publisher",
+            "docs": [
+              "Devnet only: permits `quorum == 1`. Recorded permanently as `Registry.single_publisher`."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Observation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ObservationRecorded",
+      "docs": [
+        "An observation that did not (yet) move the benchmark: no quorum, or a quorum that disagreed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "fresh_count",
+            "type": "u8"
+          },
+          {
+            "name": "disputed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Published",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "median_bp",
+            "type": "u16"
+          },
+          {
+            "name": "ema_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "accrual_e18",
+            "type": "u128"
+          },
+          {
+            "name": "support",
+            "type": "u8"
+          },
+          {
+            "name": "clamped",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Registry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "docs": [
+              "May only tighten: `remove_publisher`."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "publishers",
+            "docs": [
+              "Empty slots are `Pubkey::default()`. Index `i` owns `Benchmark.observations[i]`."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                5
+              ]
+            }
+          },
+          {
+            "name": "quorum",
+            "type": "u8"
+          },
+          {
+            "name": "single_publisher",
+            "docs": [
+              "Devnet flag: the registry was created allowing a quorum of one. Never true on a mainnet registry."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "count",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

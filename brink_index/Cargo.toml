@@ -1,0 +1,27 @@
+[package]
+name = "brink_index"
+version = "0.1.0"
+description = "Brink benchmark index: publishes guarded floating-rate benchmarks (value, EMA, cumulative accrual) for the swap AMM"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "brink_index"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = { workspace = true, features = ["event-cpi"] }
+
+[lints]
+workspace = true

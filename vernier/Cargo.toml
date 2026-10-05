@@ -1,0 +1,24 @@
+[package]
+name = "vernier"
+version = "0.1.0"
+description = "Brink pricing library: deterministic integer-bp quotes for fixed-for-floating rate swaps"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+anchor = ["dep:anchor-lang"]     # exposes the error conversion for the program; the core stays dependency-free
+
+[dependencies]
+anchor-lang = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = "1.5"
+
+[lints]
+workspace = true

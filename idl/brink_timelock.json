@@ -1,0 +1,1048 @@
+{
+  "address": "CeQz4x7Ad7Hg715Tn4PHtvtAxYin2PHv4KGaD3KS3kM5",
+  "metadata": {
+    "name": "brink_timelock",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink upgrade timelock: delayed, cancellable program upgrades and authority transfers through a PDA upgrade authority"
+  },
+  "instructions": [
+    {
+      "name": "cancel",
+      "docs": [
+        "Cancels a queued operation. Proposer or guardian at any time; anyone once the operation has expired",
+        "(`eta + GRACE_SLOTS` passed). The account is closed and rent returned to the proposer."
+      ],
+      "discriminator": [
+        232,
+        219,
+        223,
+        41,
+        219,
+        236,
+        220,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "operation"
+          ]
+        },
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "operation",
+          "writable": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "execute_config",
+      "docs": [
+        "Executes a `SetDelay` or `SetRoles` operation on the timelock itself."
+      ],
+      "discriminator": [
+        189,
+        36,
+        99,
+        231,
+        117,
+        10,
+        8,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "operation"
+          ]
+        },
+        {
+          "name": "executor",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "operation",
+          "writable": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "execute_invoke",
+      "docs": [
+        "Executes an `Invoke` operation: a CPI into `target_program` with the account list given as remaining",
+        "accounts and `data` as instruction data. Both must hash to the values pinned at queue time. The",
+        "`[\"authority\"]` PDA is marked as a signer wherever it appears in the list and signs the CPI; every other",
+        "signer in the list must sign the outer transaction (the runtime refuses privilege escalation), which is how",
+        "co-signed transfers such as `admin_set_authority` work when the PDA is the incoming authority."
+      ],
+      "discriminator": [
+        25,
+        143,
+        207,
+        190,
+        174,
+        228,
+        130,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "operation"
+          ]
+        },
+        {
+          "name": "executor",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "operation",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
+      "name": "execute_set_upgrade_authority",
+      "docs": [
+        "Executes a `SetUpgradeAuthority` operation (migration to a new timelock or governance account)."
+      ],
+      "discriminator": [
+        207,
+        138,
+        160,
+        173,
+        122,
+        64,
+        246,
+        56
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "operation"
+          ]
+        },
+        {
+          "name": "executor",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "operation",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program_data",
+          "writable": true
+        },
+        {
+          "name": "new_authority",
+          "docs": [
+            "The incoming authority must co-sign (loader `_checked` variant)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "loader",
+          "address": "BPFLoaderUpgradeab1e11111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "execute_upgrade",
+      "docs": [
+        "Executes an `Upgrade` operation: CPI to the loader with the PDA as upgrade authority."
+      ],
+      "discriminator": [
+        205,
+        219,
+        100,
+        218,
+        66,
+        39,
+        215,
+        24
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "operation"
+          ]
+        },
+        {
+          "name": "executor",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "operation",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program_data",
+          "writable": true
+        },
+        {
+          "name": "target_program",
+          "writable": true
+        },
+        {
+          "name": "buffer",
+          "writable": true
+        },
+        {
+          "name": "spill",
+          "docs": [
+            "so an executor cannot redirect them (L-20)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        },
+        {
+          "name": "clock",
+          "address": "SysvarC1ock11111111111111111111111111111111"
+        },
+        {
+          "name": "loader",
+          "address": "BPFLoaderUpgradeab1e11111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialise",
+      "docs": [
+        "Creates the singleton timelock. Only the program's current upgrade authority (the deployer) may call it,",
+        "so the first transaction after deployment cannot be front-run (review finding F-14). The deployer then",
+        "sets every program's upgrade authority to the `[\"authority\"]` PDA and hands `proposer` to governance."
+      ],
+      "discriminator": [
+        162,
+        198,
+        118,
+        235,
+        215,
+        247,
+        25,
+        118
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "The deployer: must be this program's upgrade authority (F-14)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "This program's own `ProgramData` (loader-owned, address derived from the program id); binds `payer` to",
+            "the upgrade authority so nobody else can create the singleton."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "proposer",
+          "type": "pubkey"
+        },
+        {
+          "name": "executor",
+          "type": "pubkey"
+        },
+        {
+          "name": "guardian",
+          "type": "pubkey"
+        },
+        {
+          "name": "delay_slots",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "queue",
+      "docs": [
+        "Queues an operation. Only the proposer. The eta is fixed at queue time from the current delay."
+      ],
+      "discriminator": [
+        112,
+        64,
+        181,
+        10,
+        211,
+        85,
+        67,
+        206
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "timelock"
+          ]
+        },
+        {
+          "name": "operation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "timelock.nonce",
+                "account": "Timelock"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "OperationKind"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Operation",
+      "discriminator": [
+        171,
+        150,
+        196,
+        17,
+        229,
+        166,
+        58,
+        44
+      ]
+    },
+    {
+      "name": "Timelock",
+      "discriminator": [
+        189,
+        33,
+        78,
+        75,
+        205,
+        31,
+        4,
+        177
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Cancelled",
+      "discriminator": [
+        136,
+        23,
+        42,
+        65,
+        143,
+        233,
+        234,
+        46
+      ]
+    },
+    {
+      "name": "Executed",
+      "discriminator": [
+        8,
+        232,
+        139,
+        132,
+        197,
+        45,
+        29,
+        164
+      ]
+    },
+    {
+      "name": "Queued",
+      "discriminator": [
+        118,
+        75,
+        149,
+        53,
+        106,
+        148,
+        117,
+        134
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "DelayOutOfRange",
+      "msg": "delay outside [48h, 30d]"
+    },
+    {
+      "code": 6001,
+      "name": "RolesMustDiffer",
+      "msg": "roles must be non-zero keys and the guardian must differ from the proposer and the executor"
+    },
+    {
+      "code": 6002,
+      "name": "Unauthorised",
+      "msg": "signer is not permitted to do this"
+    },
+    {
+      "code": 6003,
+      "name": "NotQueued",
+      "msg": "operation is not in Queued state"
+    },
+    {
+      "code": 6004,
+      "name": "TooEarly",
+      "msg": "eta not reached"
+    },
+    {
+      "code": 6005,
+      "name": "Expired",
+      "msg": "operation expired (grace window passed)"
+    },
+    {
+      "code": 6006,
+      "name": "KindMismatch",
+      "msg": "operation kind does not match this instruction"
+    },
+    {
+      "code": 6007,
+      "name": "AccountMismatch",
+      "msg": "account does not match the operation"
+    },
+    {
+      "code": 6008,
+      "name": "BufferMalformed",
+      "msg": "buffer account malformed"
+    },
+    {
+      "code": 6009,
+      "name": "BufferHashMismatch",
+      "msg": "buffer content changed since it was queued"
+    },
+    {
+      "code": 6010,
+      "name": "Overflow",
+      "msg": "arithmetic overflow"
+    },
+    {
+      "code": 6011,
+      "name": "InvokeTargetForbidden",
+      "msg": "invoke may not target or write loader state: not the timelock, the loader, the system program, nor any writable loader-owned account"
+    },
+    {
+      "code": 6012,
+      "name": "InvokeAccountsMismatch",
+      "msg": "account list does not hash to the queued accounts_hash"
+    },
+    {
+      "code": 6013,
+      "name": "InvokeDataMismatch",
+      "msg": "instruction data does not hash to the queued data_hash"
+    },
+    {
+      "code": 6014,
+      "name": "NotUpgradeAuthority",
+      "msg": "only the program's upgrade authority may initialise"
+    }
+  ],
+  "types": [
+    {
+      "name": "Cancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operation",
+            "type": "pubkey"
+          },
+          {
+            "name": "by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Executed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operation",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "OperationKind"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Operation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "timelock",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "OperationKind"
+              }
+            }
+          },
+          {
+            "name": "queued_slot",
+            "type": "u64"
+          },
+          {
+            "name": "eta_slot",
+            "type": "u64"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "OperationState"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "payer",
+            "docs": [
+              "The proposer that paid for this account; its rent returns here whatever the roles are by then (L-26)."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperationKind",
+      "docs": [
+        "What a queued operation will do. Fully specified at queue time; nothing is decided at execution."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Upgrade",
+            "fields": [
+              {
+                "name": "program",
+                "type": "pubkey"
+              },
+              {
+                "name": "buffer",
+                "type": "pubkey"
+              },
+              {
+                "name": "buffer_hash",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "SetUpgradeAuthority",
+            "fields": [
+              {
+                "name": "program",
+                "type": "pubkey"
+              },
+              {
+                "name": "new_authority",
+                "type": "pubkey"
+              }
+            ]
+          },
+          {
+            "name": "SetDelay",
+            "fields": [
+              {
+                "name": "delay_slots",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "SetRoles",
+            "fields": [
+              {
+                "name": "proposer",
+                "type": "pubkey"
+              },
+              {
+                "name": "executor",
+                "type": "pubkey"
+              },
+              {
+                "name": "guardian",
+                "type": "pubkey"
+              }
+            ]
+          },
+          {
+            "name": "Invoke",
+            "fields": [
+              {
+                "name": "program",
+                "type": "pubkey"
+              },
+              {
+                "name": "accounts_hash",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              },
+              {
+                "name": "data_hash",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperationState",
+      "docs": [
+        "`Executed` and `Cancelled` are transient: the account is closed in the same transaction, so a stored",
+        "operation is always `Queued`. Kept for the event payloads and clients."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Queued"
+          },
+          {
+            "name": "Executed"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Queued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operation",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "eta_slot",
+            "type": "u64"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "OperationKind"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Timelock",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposer",
+            "type": "pubkey"
+          },
+          {
+            "name": "executor",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "delay_slots",
+            "type": "u64"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

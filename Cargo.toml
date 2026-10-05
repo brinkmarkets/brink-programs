@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = ["vernier", "swap_amm", "brink_index", "brink_timelock", "brink_sale"]
+exclude = ["vernier/fuzz"]
+
+# Selects the pinned verifiable-build image (Solana CLI 3.1.10) for deterministic builds and on-chain verification.
+[workspace.metadata.cli]
+solana = "3.1.10"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.89"
+license = "BUSL-1.1"
+repository = "https://github.com/brinkmarkets/brink-programs"
+
+[workspace.dependencies]
+anchor-lang = "1.1.2"
+anchor-spl  = "1.1.2"
+vernier = { path = "vernier" }
+
+[profile.release]
+overflow-checks = true      # never silently wrap on-chain
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "allow", priority = -1 }
+arithmetic_side_effects = "deny"   # forces checked_* / saturating_* everywhere
+indexing_slicing = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+integer_division = "allow"   # divisions are deliberate floor/round steps on fixed-point bp values; each site is checked for a non-zero divisor
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)", "cfg(feature, values(\"custom-heap\", \"custom-panic\", \"solana\", \"anchor-debug\"))", "cfg(target_os, values(\"solana\"))"] }
+missing_docs = "allow"   # vernier opts in with #![deny(missing_docs)]

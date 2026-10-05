@@ -1,0 +1,23 @@
+[package]
+name = "vernier-model"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Independent exact-arithmetic reference model of the Brink maths plus differential drivers (audit artefact, not shipped)"
+
+# Standalone: not a member of the programs workspace, so `cargo run` here never touches the Anchor crates.
+[workspace]
+
+[dependencies]
+vernier = { path = ".." }
+
+[dev-dependencies]
+proptest = "1.5"
+
+[[bin]]
+name = "diff"
+path = "src/bin/diff.rs"
+
+[profile.release]
+overflow-checks = true
+debug-assertions = true

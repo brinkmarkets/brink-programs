@@ -1,0 +1,29 @@
+# Simulation and stress harness for the Brink programs. Detached from the programs workspace for the same reason
+# as tests/svm: the harness tracks LiteSVM/Agave crate versions, the programs track Anchor's. The only contracts
+# with the programs are the `vernier` crate (linked by path, pure maths) and the `.so` files under ../../target/deploy.
+[workspace]
+resolver = "2"
+members = ["core", "fast", "svm"]
+exclude = ["hook"]
+
+[workspace.package]
+edition = "2021"
+publish = false
+
+# Keep the target directory small: no debug info in dev; dependencies lightly optimised so
+# LiteSVM runs thousands of transactions quickly.
+[profile.dev]
+debug = 0
+strip = "debuginfo"
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+debug = 0
+strip = "debuginfo"
+opt-level = 3
+codegen-units = 1
+lto = "thin"
+overflow-checks = true

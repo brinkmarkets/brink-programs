@@ -1,0 +1,21 @@
+[package]
+name = "vernier-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+vernier = { path = ".." }
+
+[[bin]]
+name = "quote"
+path = "fuzz_targets/quote.rs"
+test = false
+doc = false
+
+[workspace]

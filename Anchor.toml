@@ -1,0 +1,31 @@
+[toolchain]
+anchor_version = "1.1.2"
+solana_version = "3.1.10"
+
+[workspace]
+members = ["swap_amm", "brink_index", "brink_timelock", "brink_sale"]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+swap_amm = "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce"
+brink_index = "J2udZ8xzSsETsrSnbW3DeLFBTVooKRup3P7LWKSRwuvS"
+brink_timelock = "CeQz4x7Ad7Hg715Tn4PHtvtAxYin2PHv4KGaD3KS3kM5"
+brink_sale = "GYCJoDiZCh7mbqyWRjYJmpPUt3nPLs6887tGm58rmK3v"
+
+[programs.devnet]
+swap_amm = "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce"
+brink_index = "J2udZ8xzSsETsrSnbW3DeLFBTVooKRup3P7LWKSRwuvS"
+brink_timelock = "CeQz4x7Ad7Hg715Tn4PHtvtAxYin2PHv4KGaD3KS3kM5"
+brink_sale = "GYCJoDiZCh7mbqyWRjYJmpPUt3nPLs6887tGm58rmK3v"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+unit = "cargo test --workspace"
+e2e = "./build-sbf.sh && cd tests/svm && cargo test"
+fuzz = "cd vernier/fuzz && cargo +nightly fuzz run quote -- -max_total_time=600"

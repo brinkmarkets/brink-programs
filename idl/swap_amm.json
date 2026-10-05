@@ -1,0 +1,5377 @@
+{
+  "address": "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce",
+  "metadata": {
+    "name": "swap_amm",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink singleton rates AMM: pools, swaps, hooks, flash accounting and settlement on Solana"
+  },
+  "instructions": [
+    {
+      "name": "admin_create_pool",
+      "docs": [
+        "Creates a pool for a benchmark, with its share mint, vault and optional hook set."
+      ],
+      "discriminator": [
+        215,
+        198,
+        250,
+        31,
+        206,
+        200,
+        74,
+        185
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "benchmark"
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "benchmark"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  97,
+                  114,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreatePoolArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin_initialise_global",
+      "docs": [
+        "Creates the global account and the fee vault. Called once by the deployer, then the authority is handed",
+        "to the timelock PDA with `admin_set_authority`."
+      ],
+      "discriminator": [
+        224,
+        234,
+        77,
+        7,
+        188,
+        114,
+        127,
+        251
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "The deployer: must be this program's upgrade authority (review finding F-14), so the singleton cannot be",
+            "created by whoever lands the first transaction after deployment."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "This program's own `ProgramData` (loader-owned, address derived from the program id)."
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "docs": [
+            "Canonical USDC (mainnet or devnet); checked by address in the handler. Decimals must be 6."
+          ]
+        },
+        {
+          "name": "fee_vault",
+          "docs": [
+            "Unswept fees. Owned by the global PDA."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury"
+        },
+        {
+          "name": "buyback_escrow"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitialiseGlobalArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin_queue_calibration",
+      "docs": [
+        "Publishes a new Vernier calibration that becomes effective after `Global.param_delay_slots`."
+      ],
+      "discriminator": [
+        24,
+        48,
+        120,
+        29,
+        28,
+        93,
+        142,
+        157
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "VernierParamsOnChain"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin_set_authority",
+      "docs": [
+        "Hands authority (and guardian) to new keys."
+      ],
+      "discriminator": [
+        7,
+        72,
+        233,
+        189,
+        124,
+        10,
+        225,
+        76
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "new_authority",
+          "docs": [
+            "The incoming authority co-signs, so a mistyped key cannot take governance (review finding F-17)."
+          ],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "guardian",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "admin_set_basis_pair",
+      "docs": [
+        "Governance enables a basis pair: pay fixed on `pool_a` against receive fixed on `pool_b`, with the",
+        "correlation offset applied to both legs' demand charge. Absent the pair, basis swaps are refused."
+      ],
+      "discriminator": [
+        128,
+        109,
+        109,
+        124,
+        60,
+        45,
+        11,
+        219
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool_a",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_a.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_b",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_b.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  97,
+                  115,
+                  105,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_a"
+              },
+              {
+                "kind": "account",
+                "path": "pool_b"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "SetBasisPairArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin_set_mode",
+      "docs": [
+        "Sets the operating mode: Normal, Limited, WithdrawOnly, Halted. The guardian may only tighten."
+      ],
+      "discriminator": [
+        96,
+        81,
+        2,
+        27,
+        171,
+        84,
+        196,
+        90
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "docs": [
+            "Authority may set any mode; guardian may only tighten, and never past WithdrawOnly (checked in handler)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "mode",
+          "type": {
+            "defined": {
+              "name": "OperatingMode"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin_update_basis_pair",
+      "docs": [
+        "Governance changes an existing pair's correlation offset."
+      ],
+      "discriminator": [
+        164,
+        82,
+        116,
+        105,
+        66,
+        219,
+        96,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  97,
+                  115,
+                  105,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pair.pool_a",
+                "account": "BasisPair"
+              },
+              {
+                "kind": "account",
+                "path": "pair.pool_b",
+                "account": "BasisPair"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "SetBasisPairArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "crank_liquidate_swap",
+      "docs": [
+        "Permissionless crank: liquidates a swap whose collateral is exhausted or within six hours of maturity."
+      ],
+      "discriminator": [
+        165,
+        37,
+        129,
+        129,
+        35,
+        30,
+        204,
+        158
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: fees accrue on the pool (review F-29, ADR-001)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "signer",
+          "docs": [
+            "Trader for `cancel`; anyone for `settle` / `liquidate`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "cranker_usdc",
+          "docs": [
+            "Where the crank bounty goes on `settle` / `liquidate`. Must belong to the signer. Omit it (or crank your own",
+            "position) and no bounty is paid."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "crank_process_withdrawals",
+      "docs": [
+        "Permissionless crank: closes the open epoch, fills it pro rata up to the capacity the caps leave."
+      ],
+      "discriminator": [
+        18,
+        220,
+        224,
+        9,
+        223,
+        224,
+        46,
+        174
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "queue"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "Prices the queued shares conservatively against the open book (ADR-008): the same value an immediate",
+            "`lp_withdraw` would receive, so the queue never pays more than the exit path."
+          ],
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "relations": [
+            "queue"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "vault",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "crank_settle_swap",
+      "docs": [
+        "Permissionless crank: settles a matured swap against the average index and closes it."
+      ],
+      "discriminator": [
+        126,
+        212,
+        135,
+        52,
+        100,
+        212,
+        13,
+        74
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: fees accrue on the pool (review F-29, ADR-001)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "signer",
+          "docs": [
+            "Trader for `cancel`; anyone for `settle` / `liquidate`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "cranker_usdc",
+          "docs": [
+            "Where the crank bounty goes on `settle` / `liquidate`. Must belong to the signer. Omit it (or crank your own",
+            "position) and no bounty is paid."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "crank_start_forward",
+      "docs": [
+        "Permissionless: records a forward's start reading once its start has passed."
+      ],
+      "discriminator": [
+        193,
+        96,
+        222,
+        123,
+        167,
+        217,
+        212,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_withdraw_queue",
+      "docs": [
+        "Permissionless, once per pool: creates the withdrawal queue and the share escrow."
+      ],
+      "discriminator": [
+        86,
+        13,
+        175,
+        124,
+        210,
+        91,
+        238,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "lp_claim_withdrawal",
+      "docs": [
+        "Permissionless: pays a processed request to the destinations recorded at enqueue and returns its",
+        "unfilled shares."
+      ],
+      "discriminator": [
+        200,
+        25,
+        181,
+        170,
+        36,
+        187,
+        233,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "queue",
+            "request"
+          ]
+        },
+        {
+          "name": "queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "request",
+          "writable": true
+        },
+        {
+          "name": "lp",
+          "writable": true,
+          "relations": [
+            "request"
+          ]
+        },
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "lp_usdc",
+          "docs": [
+            "Any USDC account owned by the LP (the one recorded at enqueue, or a fresh associated token account",
+            "that anyone may create for them), so a closed destination can never leave a request unclaimable (H-1)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "lp_shares",
+          "docs": [
+            "Any share account owned by the LP, likewise."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "relations": [
+            "queue"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "lp_deposit",
+      "docs": [
+        "LP deposits USDC and receives pool shares at the current share price."
+      ],
+      "discriminator": [
+        27,
+        77,
+        210,
+        69,
+        12,
+        43,
+        148,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: deposits book no fee, so the shared account takes no write lock (ADR-001, review F-29)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "Read-only: prices the open book at the current accrual and published value (ADR-008, maths M-12)."
+          ],
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "lp",
+          "signer": true
+        },
+        {
+          "name": "lp_usdc",
+          "writable": true
+        },
+        {
+          "name": "lp_shares",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "hook_program",
+          "optional": true
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "lp_dequeue_withdraw",
+      "docs": [
+        "LP takes escrowed shares back while the request's epoch is still open."
+      ],
+      "discriminator": [
+        153,
+        69,
+        236,
+        244,
+        133,
+        101,
+        87,
+        6
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "queue",
+            "request"
+          ]
+        },
+        {
+          "name": "queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "request",
+          "writable": true
+        },
+        {
+          "name": "lp",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "request"
+          ]
+        },
+        {
+          "name": "lp_shares",
+          "writable": true,
+          "relations": [
+            "request"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "relations": [
+            "queue"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "lp_enqueue_withdraw",
+      "docs": [
+        "LP escrows shares and joins the open epoch. Priced at processing, not now."
+      ],
+      "discriminator": [
+        71,
+        198,
+        150,
+        159,
+        207,
+        199,
+        7,
+        250
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "queue"
+          ]
+        },
+        {
+          "name": "queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "request",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  113,
+                  117,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "lp"
+              },
+              {
+                "kind": "arg",
+                "path": "seed"
+              }
+            ]
+          }
+        },
+        {
+          "name": "lp",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "lp_shares",
+          "writable": true
+        },
+        {
+          "name": "lp_usdc",
+          "docs": [
+            "Recorded as the claim destination; must belong to the LP and hold USDC."
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "relations": [
+            "queue"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        },
+        {
+          "name": "seed",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "lp_withdraw",
+      "docs": [
+        "LP burns shares for USDC, paying the exit fee while swaps are open. Serves only inside the withdraw",
+        "utilisation limit; beyond it fails with `UseWithdrawQueue`."
+      ],
+      "discriminator": [
+        205,
+        206,
+        130,
+        170,
+        173,
+        51,
+        11,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: the exit fee accrues on the pool (review F-29, ADR-001)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "Read-only: prices the open book at the current accrual and published value (ADR-008, maths M-12)."
+          ],
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "lp",
+          "signer": true
+        },
+        {
+          "name": "lp_usdc",
+          "writable": true
+        },
+        {
+          "name": "lp_shares",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        },
+        {
+          "name": "min_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "sweep_fees",
+      "docs": [
+        "Permissionless, per pool: moves the pool's accrued platform fees 50/50 from its vault to the buyback",
+        "escrow and the treasury."
+      ],
+      "discriminator": [
+        175,
+        225,
+        98,
+        71,
+        118,
+        66,
+        34,
+        148
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Written only here (lifetime counters); never on the hot path."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "buyback_escrow",
+          "writable": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "sync_vault",
+      "docs": [
+        "Permissionless: folds USDC sent directly to a pool vault into LP capital."
+      ],
+      "discriminator": [
+        19,
+        211,
+        150,
+        118,
+        94,
+        208,
+        138,
+        204
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "trader_cancel_basis_swap",
+      "docs": [
+        "Trader closes both legs of a basis swap early, with one floor on the net payout."
+      ],
+      "discriminator": [
+        49,
+        50,
+        143,
+        113,
+        88,
+        63,
+        210,
+        252
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_a.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark_a"
+        },
+        {
+          "name": "swap_a",
+          "writable": true
+        },
+        {
+          "name": "vault_a",
+          "writable": true
+        },
+        {
+          "name": "pool_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_b.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark_b"
+        },
+        {
+          "name": "swap_b",
+          "writable": true
+        },
+        {
+          "name": "vault_b",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "docs": [
+            "The trader signs: both legs are theirs (`has_one`), and the rent of both returns to them."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "swap_a",
+            "swap_b"
+          ]
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "min_payout",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "trader_cancel_swap",
+      "docs": [
+        "Trader cancels early at the then-current opposite-leg quote; the difference settles against collateral."
+      ],
+      "discriminator": [
+        179,
+        46,
+        220,
+        153,
+        2,
+        151,
+        85,
+        246
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: fees accrue on the pool (review F-29, ADR-001)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "relations": [
+            "swap"
+          ]
+        },
+        {
+          "name": "signer",
+          "docs": [
+            "Trader for `cancel`; anyone for `settle` / `liquidate`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "cranker_usdc",
+          "docs": [
+            "Where the crank bounty goes on `settle` / `liquidate`. Must belong to the signer. Omit it (or crank your own",
+            "position) and no bounty is paid."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "min_payout",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "trader_open_basis_swap",
+      "docs": [
+        "Trader opens a basis swap: two linked legs, pay-fixed on pool A and receive-fixed on pool B, same tenor",
+        "and notional, each collateralised in its own pool, in one transaction."
+      ],
+      "discriminator": [
+        123,
+        64,
+        34,
+        191,
+        212,
+        119,
+        215,
+        31
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pair",
+          "docs": [
+            "The pair record: its presence enables the pair, its offset prices it. Seeds bind it to this ordering."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  97,
+                  115,
+                  105,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_a"
+              },
+              {
+                "kind": "account",
+                "path": "pool_b"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_a.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "pair"
+          ]
+        },
+        {
+          "name": "benchmark_a"
+        },
+        {
+          "name": "swap_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  119,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_a"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "args.client_seed"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_a",
+          "writable": true
+        },
+        {
+          "name": "pool_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_b.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "pair"
+          ]
+        },
+        {
+          "name": "benchmark_b"
+        },
+        {
+          "name": "swap_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  119,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool_b"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "args.client_seed"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_b",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "hook_program_a",
+          "optional": true
+        },
+        {
+          "name": "hook_program_b",
+          "optional": true
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "OpenBasisSwapArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "trader_open_forward_swap",
+      "docs": [
+        "Trader opens a forward-starting swap: a fixed rate agreed now on the Vernier forward curve for a swap",
+        "whose floating accrual begins 28, 60 or 90 days ahead."
+      ],
+      "discriminator": [
+        48,
+        255,
+        168,
+        104,
+        108,
+        4,
+        118,
+        131
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: fees accrue on the pool (review F-29, ADR-001)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "Owner check is implicit: `Account<Benchmark>` requires the index program as owner."
+          ],
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  119,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "args.client_seed"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "hook_program",
+          "optional": true
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "OpenForwardSwapArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "trader_open_swap",
+      "docs": [
+        "Trader opens a fixed-for-floating swap. The fixed rate is quoted in this slot and must be within",
+        "`limit_rate_bp` or the instruction fails (the AMM equivalent of slippage protection)."
+      ],
+      "discriminator": [
+        170,
+        52,
+        49,
+        233,
+        15,
+        16,
+        193,
+        149
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "docs": [
+            "Read-only: fees accrue on the pool, so the shared account takes no write lock (review F-29, ADR-001)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "Owner check is implicit: `Account<Benchmark>` requires the index program as owner."
+          ],
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  119,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "args.client_seed"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "trader_usdc",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "hook_program",
+          "optional": true
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "OpenSwapArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "BasisPair",
+      "discriminator": [
+        75,
+        237,
+        2,
+        82,
+        221,
+        123,
+        158,
+        225
+      ]
+    },
+    {
+      "name": "Global",
+      "discriminator": [
+        167,
+        232,
+        232,
+        177,
+        200,
+        108,
+        114,
+        127
+      ]
+    },
+    {
+      "name": "Pool",
+      "discriminator": [
+        241,
+        154,
+        109,
+        4,
+        17,
+        177,
+        109,
+        188
+      ]
+    },
+    {
+      "name": "Swap",
+      "discriminator": [
+        53,
+        206,
+        146,
+        152,
+        44,
+        97,
+        120,
+        177
+      ]
+    },
+    {
+      "name": "WithdrawQueue",
+      "discriminator": [
+        172,
+        44,
+        207,
+        86,
+        230,
+        93,
+        40,
+        173
+      ]
+    },
+    {
+      "name": "WithdrawRequest",
+      "discriminator": [
+        186,
+        239,
+        174,
+        191,
+        189,
+        13,
+        47,
+        196
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BasisPairSet",
+      "discriminator": [
+        67,
+        221,
+        158,
+        142,
+        238,
+        8,
+        85,
+        186
+      ]
+    },
+    {
+      "name": "BasisSwapClosed",
+      "discriminator": [
+        131,
+        133,
+        234,
+        168,
+        168,
+        76,
+        131,
+        132
+      ]
+    },
+    {
+      "name": "BasisSwapOpened",
+      "discriminator": [
+        28,
+        43,
+        151,
+        103,
+        198,
+        107,
+        163,
+        56
+      ]
+    },
+    {
+      "name": "CalibrationQueued",
+      "discriminator": [
+        109,
+        150,
+        252,
+        95,
+        224,
+        115,
+        116,
+        32
+      ]
+    },
+    {
+      "name": "FeeCollected",
+      "discriminator": [
+        12,
+        28,
+        17,
+        248,
+        244,
+        36,
+        8,
+        73
+      ]
+    },
+    {
+      "name": "FeesSwept",
+      "discriminator": [
+        96,
+        218,
+        115,
+        136,
+        74,
+        170,
+        202,
+        172
+      ]
+    },
+    {
+      "name": "ForwardStarted",
+      "discriminator": [
+        26,
+        22,
+        249,
+        191,
+        205,
+        17,
+        96,
+        120
+      ]
+    },
+    {
+      "name": "LiquidityChanged",
+      "discriminator": [
+        132,
+        132,
+        193,
+        214,
+        12,
+        99,
+        40,
+        28
+      ]
+    },
+    {
+      "name": "ModeChanged",
+      "discriminator": [
+        149,
+        123,
+        78,
+        29,
+        237,
+        72,
+        67,
+        229
+      ]
+    },
+    {
+      "name": "PoolCreated",
+      "discriminator": [
+        202,
+        44,
+        41,
+        88,
+        104,
+        220,
+        157,
+        82
+      ]
+    },
+    {
+      "name": "SwapClosed",
+      "discriminator": [
+        71,
+        35,
+        64,
+        248,
+        81,
+        171,
+        71,
+        52
+      ]
+    },
+    {
+      "name": "SwapOpened",
+      "discriminator": [
+        31,
+        172,
+        136,
+        212,
+        249,
+        139,
+        42,
+        67
+      ]
+    },
+    {
+      "name": "VaultSynced",
+      "discriminator": [
+        113,
+        150,
+        126,
+        33,
+        213,
+        233,
+        201,
+        26
+      ]
+    },
+    {
+      "name": "WithdrawClaimed",
+      "discriminator": [
+        77,
+        130,
+        89,
+        38,
+        239,
+        172,
+        174,
+        85
+      ]
+    },
+    {
+      "name": "WithdrawDequeued",
+      "discriminator": [
+        253,
+        51,
+        5,
+        99,
+        192,
+        160,
+        9,
+        94
+      ]
+    },
+    {
+      "name": "WithdrawEpochProcessed",
+      "discriminator": [
+        108,
+        39,
+        212,
+        29,
+        139,
+        121,
+        154,
+        66
+      ]
+    },
+    {
+      "name": "WithdrawQueued",
+      "discriminator": [
+        219,
+        205,
+        253,
+        21,
+        86,
+        2,
+        60,
+        111
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Halted",
+      "msg": "protocol is halted"
+    },
+    {
+      "code": 6001,
+      "name": "WithdrawOnly",
+      "msg": "protocol is in withdraw-only mode"
+    },
+    {
+      "code": 6002,
+      "name": "LimitedModeCap",
+      "msg": "protocol is in limited mode: notional above the limited-mode cap"
+    },
+    {
+      "code": 6003,
+      "name": "BenchmarkNotPublished",
+      "msg": "benchmark is not published"
+    },
+    {
+      "code": 6004,
+      "name": "BenchmarkStale",
+      "msg": "benchmark publication is stale"
+    },
+    {
+      "code": 6005,
+      "name": "BenchmarkOutOfBand",
+      "msg": "benchmark value outside sanity band"
+    },
+    {
+      "code": 6006,
+      "name": "PoolInvariant",
+      "msg": "pool invariant violated after instruction"
+    },
+    {
+      "code": 6007,
+      "name": "Conservation",
+      "msg": "vault balance does not equal tvl + collateral held"
+    },
+    {
+      "code": 6008,
+      "name": "LegCap",
+      "msg": "per-leg utilisation cap exceeded"
+    },
+    {
+      "code": 6009,
+      "name": "LimitRate",
+      "msg": "quote outside the caller's limit rate"
+    },
+    {
+      "code": 6010,
+      "name": "Slippage",
+      "msg": "output below the caller's minimum"
+    },
+    {
+      "code": 6011,
+      "name": "NotionalTooSmall",
+      "msg": "notional below minimum"
+    },
+    {
+      "code": 6012,
+      "name": "NotionalTooLarge",
+      "msg": "notional above maximum for this pool"
+    },
+    {
+      "code": 6013,
+      "name": "Tenor",
+      "msg": "invalid tenor index"
+    },
+    {
+      "code": 6014,
+      "name": "NotMatured",
+      "msg": "swap has not matured"
+    },
+    {
+      "code": 6015,
+      "name": "AlreadySettled",
+      "msg": "swap already settled"
+    },
+    {
+      "code": 6016,
+      "name": "NotLiquidatable",
+      "msg": "swap is not liquidatable"
+    },
+    {
+      "code": 6017,
+      "name": "CalibrationStep",
+      "msg": "calibration change outside allowed step"
+    },
+    {
+      "code": 6018,
+      "name": "HookRejected",
+      "msg": "hook program rejected the action"
+    },
+    {
+      "code": 6019,
+      "name": "HookMismatch",
+      "msg": "hook program id does not match the pool's hook set"
+    },
+    {
+      "code": 6020,
+      "name": "PricerMismatch",
+      "msg": "pricer program id does not match the pool"
+    },
+    {
+      "code": 6021,
+      "name": "SettlementMint",
+      "msg": "settlement mint must be USDC"
+    },
+    {
+      "code": 6022,
+      "name": "TokenProgram",
+      "msg": "token program must own the settlement mint"
+    },
+    {
+      "code": 6023,
+      "name": "TokenOwner",
+      "msg": "token account owner mismatch"
+    },
+    {
+      "code": 6024,
+      "name": "GuardianScope",
+      "msg": "guardian may only tighten the operating mode"
+    },
+    {
+      "code": 6025,
+      "name": "NothingToSweep",
+      "msg": "nothing to sweep"
+    },
+    {
+      "code": 6026,
+      "name": "Overflow",
+      "msg": "arithmetic overflow"
+    },
+    {
+      "code": 6027,
+      "name": "BenchmarkHistoryUnavailable",
+      "msg": "benchmark history before the most recent accrual segment is not available"
+    },
+    {
+      "code": 6028,
+      "name": "QuoteBelowZero",
+      "msg": "fixed rate would be negative; no quotes below zero"
+    },
+    {
+      "code": 6029,
+      "name": "QuoteCeiling",
+      "msg": "fixed rate above the u16 ceiling"
+    },
+    {
+      "code": 6030,
+      "name": "Sequence",
+      "msg": "event sequence overflow"
+    },
+    {
+      "code": 6031,
+      "name": "NotUpgradeAuthority",
+      "msg": "only the program's upgrade authority may initialise"
+    },
+    {
+      "code": 6032,
+      "name": "HookExitPoint",
+      "msg": "hooks cannot be set on exit points; exits are unconditional"
+    },
+    {
+      "code": 6033,
+      "name": "UseWithdrawQueue",
+      "msg": "withdrawal exceeds the immediate limit; enqueue it"
+    },
+    {
+      "code": 6034,
+      "name": "NothingQueued",
+      "msg": "nothing queued"
+    },
+    {
+      "code": 6035,
+      "name": "EpochNotElapsed",
+      "msg": "the queue epoch has not run its minimum length since its first request"
+    },
+    {
+      "code": 6036,
+      "name": "EpochUnclaimed",
+      "msg": "an older processed epoch still has unclaimed requests; claim them first"
+    },
+    {
+      "code": 6037,
+      "name": "NoCapacity",
+      "msg": "the caps leave no capacity to fill the queue in this epoch"
+    },
+    {
+      "code": 6038,
+      "name": "RequestNotProcessed",
+      "msg": "request epoch not processed yet"
+    },
+    {
+      "code": 6039,
+      "name": "RequestProcessed",
+      "msg": "request epoch already processed; claim instead"
+    },
+    {
+      "code": 6040,
+      "name": "EpochEvicted",
+      "msg": "request epoch record no longer available"
+    },
+    {
+      "code": 6041,
+      "name": "CalibrationBound",
+      "msg": "calibration parameter outside its static bounds"
+    },
+    {
+      "code": 6042,
+      "name": "CalibrationOrder",
+      "msg": "calibration tables must be non-decreasing in tenor"
+    },
+    {
+      "code": 6043,
+      "name": "MaturedUnsettled",
+      "msg": "a matured swap awaits settlement; settle it (anyone may) before LP pricing resumes"
+    },
+    {
+      "code": 6044,
+      "name": "QueueHasPriority",
+      "msg": "an eligible withdrawal epoch has priority over new exposure for this capacity"
+    },
+    {
+      "code": 6045,
+      "name": "ShareSupplyMismatch",
+      "msg": "pool share supply mirror disagrees with the mint"
+    },
+    {
+      "code": 6046,
+      "name": "LinkedLeg",
+      "msg": "swap is one leg of a basis swap; close both legs with trader_cancel_basis_swap"
+    },
+    {
+      "code": 6047,
+      "name": "LinkNotPaired",
+      "msg": "the two swaps are not the two legs of one basis swap"
+    },
+    {
+      "code": 6048,
+      "name": "BasisSamePool",
+      "msg": "a basis swap needs two different pools"
+    },
+    {
+      "code": 6049,
+      "name": "CorrelationBound",
+      "msg": "correlation offset above MAX_CORRELATION_BP"
+    },
+    {
+      "code": 6050,
+      "name": "ForwardHorizon",
+      "msg": "a forward's start plus tenor may not run past 180 days"
+    },
+    {
+      "code": 6051,
+      "name": "ForwardNotDue",
+      "msg": "the forward has not reached its start yet"
+    },
+    {
+      "code": 6052,
+      "name": "ForwardAlreadyStarted",
+      "msg": "the forward has already started"
+    },
+    {
+      "code": 6053,
+      "name": "NotForward",
+      "msg": "swap is not a forward-starting swap"
+    }
+  ],
+  "types": [
+    {
+      "name": "BasisPair",
+      "docs": [
+        "Governance-set correlation offset for one ordered benchmark pair: a basis swap pays fixed",
+        "on `pool_a` and receives fixed on `pool_b`. `correlation_bp` is the fraction of each leg's demand charge that",
+        "the pair's documented positive correlation offsets; it never touches the model or tenor components. The",
+        "account's absence means basis swaps are not enabled for the pair. Seeds `[\"basis\", pool_a, pool_b]`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "correlation_bp",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BasisPairSet",
+      "docs": [
+        "A basis pair created or updated by governance."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "correlation_bp",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BasisSwapClosed",
+      "docs": [
+        "Both legs of a basis swap closed by the trader in one instruction; each leg also emits `SwapClosed`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BasisSwapOpened",
+      "docs": [
+        "One basis swap opened: two linked legs, each also announced by its own `SwapOpened` on its pool."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "fixed_pay_bp",
+            "type": "u16"
+          },
+          {
+            "name": "fixed_receive_bp",
+            "type": "u16"
+          },
+          {
+            "name": "correlation_bp",
+            "type": "u16"
+          },
+          {
+            "name": "offset_bp",
+            "docs": [
+              "Demand charge removed across both legs by the correlation offset, bp."
+            ],
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Benchmark",
+      "docs": [
+        "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
+        "`version`; both programs upgrade together when it changes."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "ema_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "unix_ts",
+            "type": "i64"
+          },
+          {
+            "name": "accrual_e18",
+            "type": "u128"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "band_bp",
+            "type": "u16"
+          },
+          {
+            "name": "half_life_slots",
+            "type": "u64"
+          },
+          {
+            "name": "min_interval_slots",
+            "type": "u64"
+          },
+          {
+            "name": "published",
+            "type": "bool"
+          },
+          {
+            "name": "publish_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "prev_value_bp",
+            "docs": [
+              "Value held over the most recent accrual segment `[prev_unix_ts, unix_ts]` (maths finding M-2)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "prev_unix_ts",
+            "docs": [
+              "Start of the most recent accrual segment; equals `unix_ts` until the second accepted value."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "max_drift_bp",
+            "docs": [
+              "Drift bound (S-6): the value may move at most this far from `drift_anchor_bp` within one window."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "drift_window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "drift_anchor_bp",
+            "type": "u16"
+          },
+          {
+            "name": "drift_anchor_slot",
+            "type": "u64"
+          },
+          {
+            "name": "clamped",
+            "docs": [
+              "The last accepted value was clamped by the band or the drift bound."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "disputed",
+            "docs": [
+              "The last aggregation had a quorum of fresh observations that did not agree; the value was not moved."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "support",
+            "docs": [
+              "Observations that supported the last accepted value. `1` means a single-publisher (devnet) registry."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "observations",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Observation"
+                  }
+                },
+                5
+              ]
+            }
+          },
+          {
+            "name": "ema_milli_bp",
+            "docs": [
+              "EMA at bp x 1 000 (maths finding M-6). `ema_bp` is `rhu(ema_milli_bp / 1 000)`; at most",
+              "`MAX_RATE_BP x 1 000`, so it fits `u32` and the `u16` narrowing of `ema_bp` cannot fail."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_first_day",
+            "docs": [
+              "UTC day number (unix seconds / 86 400) of the oldest fixing ever written; 0 until the first midnight the",
+              "benchmark lives through."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_head_day",
+            "docs": [
+              "UTC day number of the most recent fixing written."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixings",
+            "docs": [
+              "Ring of `FIXING_DAYS` daily fixings: the cumulative accrual (`accrual_e18` units) at 00:00 UTC of day `d`",
+              "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
+              "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
+              "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                2048
+              ]
+            }
+          },
+          {
+            "name": "ema_slot",
+            "docs": [
+              "Slot at which the EMA last moved (or was confirmed equal to its input); the decay of the next step is",
+              "measured from here, not from the last publication (M-11)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accepted_slot",
+            "docs": [
+              "Slot of the transaction that last accepted a value. `slot` is the freshness of the data behind it (M-12);",
+              "this is when the benchmark itself last moved, used to widen the band after an outage."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                12
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookSide",
+      "docs": [
+        "One side of the open book: the four signed aggregates for one leg."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "notional",
+            "type": "i128"
+          },
+          {
+            "name": "accrual_start",
+            "type": "i128"
+          },
+          {
+            "name": "maturity_weight",
+            "type": "i128"
+          },
+          {
+            "name": "fixed_leg",
+            "type": "i128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CalibrationQueued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "effective_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreatePoolArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "hook_program",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "hooks",
+            "type": {
+              "defined": {
+                "name": "HookFlags"
+              }
+            }
+          },
+          {
+            "name": "pricer",
+            "type": {
+              "defined": {
+                "name": "Pricer"
+              }
+            }
+          },
+          {
+            "name": "min_notional",
+            "type": "u64"
+          },
+          {
+            "name": "max_notional",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EpochFill",
+      "docs": [
+        "Record of one processed epoch."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch",
+            "docs": [
+              "Epoch index; `u64::MAX` for a slot never used."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "shares_queued",
+            "docs": [
+              "Shares queued when the epoch was processed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "shares_filled",
+            "docs": [
+              "Shares burned (filled) at processing."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "net_amount",
+            "docs": [
+              "Net USDC set aside for the epoch's requests (after the exit fee)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "amount_left",
+            "docs": [
+              "Net USDC still unclaimed; dust is folded into LP capital when the last request claims."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "shares_return_left",
+            "docs": [
+              "Unfilled shares still in escrow for this epoch's requests; dust is burned when the last request claims."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "unclaimed",
+            "docs": [
+              "Requests of this epoch not yet claimed."
+            ],
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeCollected",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "FeeKind"
+              }
+            }
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "buyback",
+            "type": "u64"
+          },
+          {
+            "name": "treasury",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeKind",
+      "docs": [
+        "Fee kinds, for events and the conservation invariant."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Opening"
+          },
+          {
+            "name": "Income"
+          },
+          {
+            "name": "LpExit"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeesSwept",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback",
+            "type": "u64"
+          },
+          {
+            "name": "treasury",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ForwardStarted",
+      "docs": [
+        "A forward-starting swap's start snapshot was taken: `accrual_start` is the benchmark's",
+        "cumulative accrual at `start_ts`, `fixing_kind` says how it was read (`swap::FixingKind` as `u8`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap",
+            "type": "pubkey"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "accrual_start",
+            "type": "u128"
+          },
+          {
+            "name": "fixing_kind",
+            "type": "u8"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Global",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "buyback_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "OperatingMode"
+              }
+            }
+          },
+          {
+            "name": "param_delay_slots",
+            "type": "u64"
+          },
+          {
+            "name": "limited_mode_cap",
+            "type": "u64"
+          },
+          {
+            "name": "pool_count",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "HookFlags",
+      "docs": [
+        "Hook points. Hooks observe and veto entries only (open, deposit); no exit (withdraw, cancel, settle,",
+        "liquidate) makes a hook CPI in any mode, so no hook can ever veto or starve an exit (review F-30, ADR-003).",
+        "The four retired exit points keep their slots so the layout and the point discriminators are stable; they must",
+        "be false and never fire. Hook CPIs are made in `Normal` mode only."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "before_open",
+            "docs": [
+              "Veto point: a non-zero return refuses the open."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "after_open",
+            "docs": [
+              "Notification after the open is booked; the pool account bytes carry the post-open state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_2",
+            "docs": [
+              "Retired (was `before_cancel`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_3",
+            "docs": [
+              "Retired (was `after_cancel`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "before_deposit",
+            "docs": [
+              "Veto point: a non-zero return refuses the deposit."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "after_deposit",
+            "docs": [
+              "Notification after the deposit is booked; the pool account bytes carry the post-deposit state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_6",
+            "docs": [
+              "Retired (was `before_withdraw`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_7",
+            "docs": [
+              "Retired (was `after_settle`). Must be false."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitialiseGlobalArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "param_delay_slots",
+            "type": "u64"
+          },
+          {
+            "name": "limited_mode_cap",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LegKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "PayFixed"
+          },
+          {
+            "name": "ReceiveFixed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LiquidityChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "i64"
+          },
+          {
+            "name": "shares",
+            "type": "i64"
+          },
+          {
+            "name": "share_price_e6",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ModeChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "OperatingMode"
+              }
+            }
+          },
+          {
+            "name": "by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Observation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenBasisSwapArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "limit_pay_bp",
+            "docs": [
+              "Highest fixed rate accepted on the pay-fixed leg (pool A), bp."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "limit_receive_bp",
+            "docs": [
+              "Lowest fixed rate accepted on the receive-fixed leg (pool B), bp."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "client_seed",
+            "docs": [
+              "Seed of both legs' swap PDAs (one per pool, so the keys differ)."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenForwardSwapArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "leg",
+            "type": {
+              "defined": {
+                "name": "LegKind"
+              }
+            }
+          },
+          {
+            "name": "start",
+            "docs": [
+              "Index into `vernier::START_DAYS` (0: 28 days, 1: 60 days, 2: 90 days)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "limit_rate_bp",
+            "type": "u16"
+          },
+          {
+            "name": "client_seed",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenSwapArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "leg",
+            "type": {
+              "defined": {
+                "name": "LegKind"
+              }
+            }
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "limit_rate_bp",
+            "type": "u16"
+          },
+          {
+            "name": "client_seed",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperatingMode",
+      "docs": [
+        "Kill switch and graceful degradation, designed in from day one."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Normal"
+          },
+          {
+            "name": "Limited"
+          },
+          {
+            "name": "WithdrawOnly"
+          },
+          {
+            "name": "Halted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "share_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "hook_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "hooks",
+            "type": {
+              "defined": {
+                "name": "HookFlags"
+              }
+            }
+          },
+          {
+            "name": "pricer",
+            "type": {
+              "defined": {
+                "name": "Pricer"
+              }
+            }
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "pending_params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "pending_effective_slot",
+            "type": "u64"
+          },
+          {
+            "name": "tvl",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_held",
+            "type": "u64"
+          },
+          {
+            "name": "util_pay_bp",
+            "type": "u16"
+          },
+          {
+            "name": "util_rec_bp",
+            "type": "u16"
+          },
+          {
+            "name": "open_pay_notional",
+            "type": "u64"
+          },
+          {
+            "name": "open_rec_notional",
+            "type": "u64"
+          },
+          {
+            "name": "open_swaps",
+            "type": "u32"
+          },
+          {
+            "name": "fees_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "event_seq",
+            "type": "u64"
+          },
+          {
+            "name": "min_notional",
+            "type": "u64"
+          },
+          {
+            "name": "max_notional",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "book_pay",
+            "docs": [
+              "Open book aggregates (ADR-008, ADR-017 section 2), kept per leg since external scan 1 (M-4): the pay-fixed",
+              "side and the receive-fixed side are clamped to their own collateral separately, so an unbounded gain on",
+              "one side can never be netted against an uncollectible loss on the other. Each side is signed with +1 for",
+              "pay-fixed and -1 for receive-fixed swaps and maintained exactly by `open` (add) and `close` (subtract), so",
+              "the unrealised value of the book is an O(1) function of the benchmark accrual, the published value and",
+              "the clock; see `Pool::book_value`. Units: notional in USDC base units, times basis-point-seconds or seconds."
+            ],
+            "type": {
+              "defined": {
+                "name": "BookSide"
+              }
+            }
+          },
+          {
+            "name": "book_rec",
+            "type": {
+              "defined": {
+                "name": "BookSide"
+              }
+            }
+          },
+          {
+            "name": "collateral_pay",
+            "docs": [
+              "Trader collateral held per side; `collateral_held` is their sum."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "collateral_rec",
+            "type": "u64"
+          },
+          {
+            "name": "limited_window_start",
+            "docs": [
+              "Limited-mode budget window (simulation S-2): new notional opened in this pool since `limited_window_start`",
+              "may not exceed `Global::limited_mode_cap` within `LIMITED_WINDOW_SECS`, in addition to the per-swap cap."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "limited_window_notional",
+            "type": "u64"
+          },
+          {
+            "name": "fees_buyback_accrued",
+            "docs": [
+              "Unswept platform fees held in this pool's vault, buyback half (review F-29, ADR-001, ADR-013). Fees",
+              "accrue per pool so the hot path never writes the singleton `Global` or a shared fee account."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fees_treasury_accrued",
+            "docs": [
+              "Unswept platform fees held in this pool's vault, treasury half."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "withdraw_reserved",
+            "docs": [
+              "USDC set aside in the vault for processed, unclaimed queued withdrawals (ADR-009). Not LP capital."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "ladder",
+            "docs": [
+              "Maturity ladder (external scan 1, M-5): open swaps counted by maturity day. Maturities fall on UTC",
+              "midnights, so a day bucket is exact: once a bucket's midnight has passed and its count is not zero, a",
+              "matured swap is awaiting settlement and LP pricing is suspended until it is settled (anyone may settle it",
+              "and is paid a bounty for doing so). Bucket `day % MATURITY_BUCKETS` holds six little-endian bytes: the",
+              "`u32` day it counts and a `u16` count, so a stale bucket is detected rather than aliased. Raw bytes rather",
+              "than typed arrays so that loading the account is a copy, not a per-element decode (stack frame bound)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                1536
+              ]
+            }
+          },
+          {
+            "name": "share_supply",
+            "docs": [
+              "Mirror of the share mint supply, so that paths without the mint account (`trader_open_swap`) can value",
+              "queued shares (M-18). Asserted equal to the mint wherever the mint is present."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queued_shares",
+            "docs": [
+              "Mirror of the withdrawal queue's open epoch (M-18): shares queued and the slot of the epoch's first",
+              "request, zero when none. A new swap may not consume the capacity an eligible epoch is waiting for."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queue_first_slot",
+            "type": "u64"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                24
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "share_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pricer",
+      "docs": [
+        "Which pricing curve quotes this pool. `External` is reserved for v1.1 (pricer CPI); creating such a pool",
+        "is permitted so governance can stage it, but quotes fail with `PricerMismatch` until the CPI path ships."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Vernier"
+          },
+          {
+            "name": "External",
+            "fields": [
+              {
+                "name": "program",
+                "type": "pubkey"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SetBasisPairArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "correlation_bp",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Swap",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "leg",
+            "type": {
+              "defined": {
+                "name": "LegKind"
+              }
+            }
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "fixed_bp",
+            "type": "u16"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "opened_slot",
+            "type": "u64"
+          },
+          {
+            "name": "opened_ts",
+            "type": "i64"
+          },
+          {
+            "name": "matures_ts",
+            "type": "i64"
+          },
+          {
+            "name": "index_accrual_start",
+            "type": "u128"
+          },
+          {
+            "name": "client_seed",
+            "type": "u64"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "SwapState"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "limited_window_start",
+            "docs": [
+              "Limited-mode window this swap's notional was charged to, 0 when opened outside Limited mode (M-17)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "link",
+            "docs": [
+              "Basis swap link: the key of the other leg's `Swap` account, zero for an ordinary swap.",
+              "Carved out of the former 56-byte reserve together with `link_flags`, so the account size is unchanged",
+              "and every swap written before the link existed reads as unlinked."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "link_flags",
+            "docs": [
+              "`LINK_BASIS` when this swap is one leg of a basis swap; `LINK_LEG_B` additionally on the receive-fixed",
+              "leg. Zero on an ordinary swap."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "start_ts",
+            "docs": [
+              "Forward-starting swap: the UTC midnight the floating accrual begins. Zero on a spot",
+              "swap, and ignored unless `LINK_FORWARD` is set, so an account written before this field reads unchanged."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                15
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap",
+            "type": "pubkey"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "SwapState"
+              }
+            }
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          },
+          {
+            "name": "bounty",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          },
+          {
+            "name": "fixing_kind",
+            "docs": [
+              "`swap::FixingKind` as `u8`: how the accrual at maturity was read (0 live, 1 segment, 2 fixing,",
+              "3 interpolated, 4 fallback). Always 0 for cancel before maturity and for liquidation."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapOpened",
+      "docs": [
+        "Events, emitted through `emit_cpi!` with the pool sequence so indexers detect gaps."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "leg",
+            "type": {
+              "defined": {
+                "name": "LegKind"
+              }
+            }
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "fixed_bp",
+            "type": "u16"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapState",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Settled",
+            "fields": [
+              {
+                "name": "pnl",
+                "type": "i64"
+              }
+            ]
+          },
+          {
+            "name": "Liquidated",
+            "fields": [
+              {
+                "name": "pnl",
+                "type": "i64"
+              }
+            ]
+          },
+          {
+            "name": "Cancelled",
+            "fields": [
+              {
+                "name": "pnl",
+                "type": "i64"
+              }
+            ]
+          },
+          {
+            "name": "Capped",
+            "fields": [
+              {
+                "name": "pnl",
+                "type": "i64"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultSynced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "surplus",
+            "type": "u64"
+          },
+          {
+            "name": "tvl",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VernierParamsOnChain",
+      "docs": [
+        "Vernier parameters as stored on chain (mirror of `vernier::Params`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "model_pay_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "model_rec_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "term_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "demand_k_bp",
+            "type": "u16"
+          },
+          {
+            "name": "demand_cap_bp",
+            "type": "u16"
+          },
+          {
+            "name": "collateral_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "request",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch",
+            "type": "u64"
+          },
+          {
+            "name": "paid",
+            "type": "u64"
+          },
+          {
+            "name": "shares_returned",
+            "type": "u64"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawDequeued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "request",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawEpochProcessed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch",
+            "type": "u64"
+          },
+          {
+            "name": "shares_queued",
+            "type": "u64"
+          },
+          {
+            "name": "shares_filled",
+            "type": "u64"
+          },
+          {
+            "name": "net_amount",
+            "type": "u64"
+          },
+          {
+            "name": "capacity",
+            "type": "u64"
+          },
+          {
+            "name": "requests",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawQueue",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "escrow",
+            "docs": [
+              "Pool-owned token account holding escrowed shares."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch",
+            "docs": [
+              "Open epoch: new requests join it."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "first_request_slot",
+            "docs": [
+              "Slot of the first request in the open epoch; 0 when it has none."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queued_shares",
+            "docs": [
+              "Shares escrowed for the open epoch."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "request_count",
+            "docs": [
+              "Requests in the open epoch."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "escrow_bump",
+            "type": "u8"
+          },
+          {
+            "name": "fills",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "EpochFill"
+                  }
+                },
+                8
+              ]
+            }
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawQueued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "request",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "epoch",
+            "type": "u64"
+          },
+          {
+            "name": "seed",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawRequest",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_usdc",
+            "docs": [
+              "Destinations recorded at enqueue for clients; a claim accepts these or any other token accounts the LP",
+              "owns (H-1)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_shares",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "epoch",
+            "type": "u64"
+          },
+          {
+            "name": "enqueued_slot",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

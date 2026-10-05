@@ -1,0 +1,29 @@
+[package]
+name = "brink_sale"
+version = "0.1.0"
+description = "Brink fixed-price token sale: escrowed SOL, hard and soft caps, allowlist, TGE unlock with linear vesting, refunds"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "brink_sale"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = { workspace = true, features = ["event-cpi", "init-if-needed"] }
+anchor-spl = { workspace = true }
+solana-sha256-hasher = "3"
+
+[lints]
+workspace = true

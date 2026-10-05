@@ -1,0 +1,28 @@
+[package]
+name = "brink_timelock"
+version = "0.1.0"
+description = "Brink upgrade timelock: delayed, cancellable program upgrades and authority transfers through a PDA upgrade authority"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "brink_timelock"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = { workspace = true, features = ["event-cpi"] }
+solana-sha256-hasher = "3"
+
+[lints]
+workspace = true

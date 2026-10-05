@@ -1,0 +1,3 @@
+# Shared target directory with the programs workspace (no CARGO_TARGET_DIR environment variable needed).
+[build]
+target-dir = "../../../target"
