@@ -13,17 +13,21 @@
 //! receive fixed:  fixed = min(spot, ema) − model_rec[t] − demand − term[t]
 //! imbalance_before = util_pay − util_rec
 //! imbalance_after  = before ± ceil(notional · 10_000 / tvl)       (+ pay, − receive)
+//! s_before = before (pay) or −before (receive)       imbalance signed towards the leg being opened
 //! demand = 0                                                 if |after| ≤ |before|
-//!        = min(cap, round(k · (|before| + |after|) / 20_000))  if before and after have one sign
-//!        = min(cap, round(k · |after|² / (|before| + |after|) / 20_000))   if the trade crosses zero
+//!        = min(cap, round(k · max(0, 2 · s_before + d) / 20_000))   otherwise
 //! ```
 //!
-//! The demand spread is the slope times the average absolute imbalance over the fill, counting only the part
-//! that extends the book (trapezoid rule), so a trade split into pieces pays the same total as the whole, up to
-//! rounding; the size in bp of TVL rounds up, so no trade is too small to be charged (maths finding M-3). When
-//! the fill crosses zero only the part beyond zero extends the book, and its area (`|after|² / 2`) is averaged
-//! over the whole fill (`|before| + |after|`), so a crossing trade never pays more than the same notional
-//! opened from a balanced book (external scan 1, L-23).
+//! The demand spread is the slope times the average signed imbalance over the fill, measured in the direction
+//! the trade pushes the book: `(after² − before²) / d` in signed terms, which is the trapezoid integral of
+//! `k · imbalance` from `before` to `after`. A trade therefore pays for the increase in the square of the
+//! imbalance it causes and nothing else, and any split of a fill into pieces pays the same total as the whole up
+//! to one rounding per piece, whether or not the pieces cross zero or the mirror point `−before` (maths finding
+//! M-3; external scan 1, L-23; external scan 2, finding 19, which closed the crossing-fill discount of the
+//! earlier `|after|² / (|before| + |after|)` form). The size in bp of TVL rounds up, so no trade is too small to be
+//! charged. A fill that ends at or inside `|before|` pays nothing: for a fill that crosses zero to a larger
+//! `|after|` only the part beyond the mirror point extends the book, and its area `(|after|² − |before|²) / 2`
+//! is averaged over the whole fill `|before| + |after|`, giving `|after| − |before|`.
 #![no_std]
 #![cfg_attr(
     test,
@@ -171,9 +175,11 @@ pub struct Quote {
 
 /// Demand spread (unsigned, bp) and the imbalance it was computed from.
 ///
-/// The spread is `k` times the average `|imbalance|` over the part of the fill that extends the book, round
-/// half up: `(|before| + |after|) / 2` when the trade stays on one side of zero (or starts from zero), and
-/// `|after| / 2` for the part beyond zero when it crosses. Reducing trades pay nothing.
+/// The spread is `k` times the signed average imbalance over the fill, round half up, with the imbalance
+/// signed towards the trade: `max(0, 2 s_before + d) / 2`, where `s_before` is the imbalance before the trade
+/// (negative when the trade reduces it) and `d` the size. A fill that crosses zero therefore pays the same as
+/// the sum of the two fills that meet at zero, so splitting a trade cannot lower its spread (external scan 2,
+/// finding 19). Reducing trades, whose signed average is at or below zero, pay nothing.
 ///
 /// # Errors
 /// `EmptyPool` when `tvl == 0`; `MalformedUtilisation` when either utilisation exceeds 10 000 bp. `Overflow`
@@ -208,26 +214,23 @@ pub fn demand_bp(
     }
     .ok_or(VernierError::Overflow)?;
     let reduces = after.unsigned_abs() <= before.unsigned_abs();
-    // Twice the average extending |imbalance| over the whole fill, in bp of a unit:
-    //   one sign (or before == 0): |before| + |after|
-    //   crossing zero:             |after|² / (|before| + |after|)
-    // The crossing case integrates only the part of the fill beyond zero (area |after|² / 2) and averages it
-    // over the full size |before| + |after| (L-23): a crossing trade pays at most what the same notional pays
-    // from a balanced book, and tends to that as |before| tends to zero.
-    let twice_avg: u64 = if before == 0 || (before < 0) == (after < 0) {
-        u64::from(before.unsigned_abs())
-            .checked_add(u64::from(after.unsigned_abs()))
-            .ok_or(VernierError::Overflow)?
-    } else {
-        let a = u64::from(after.unsigned_abs());
-        let size = u64::from(before.unsigned_abs())
-            .checked_add(a)
-            .ok_or(VernierError::Overflow)?;
-        a.checked_mul(a)
-            .ok_or(VernierError::Overflow)?
-            .checked_div(size)
-            .ok_or(VernierError::Overflow)?
+    // Twice the average signed imbalance over the fill, in the direction of the leg: `s_before + s_after` where
+    // `s_after = s_before + d`. This is `(after² − before²) / d`, the exact trapezoid of `imbalance` from `before`
+    // to `after`, so the charge depends only on the end points and telescopes over any split of the fill
+    // (external scan 2, finding 19). One sign: `|before| + |after|`. Crossing zero to a larger `|after|`:
+    // `|after| − |before|`, the part beyond the mirror point averaged over the whole fill. At or inside the mirror
+    // point the sum is zero or negative and the trade is a reducing one.
+    let s_before: i64 = match leg {
+        Leg::Pay => i64::from(before),
+        Leg::Receive => i64::from(before)
+            .checked_neg()
+            .ok_or(VernierError::Overflow)?,
     };
+    let twice_avg_signed = s_before
+        .checked_mul(2)
+        .and_then(|x| x.checked_add(i64::from(d_bp)))
+        .ok_or(VernierError::Overflow)?;
+    let twice_avg = u64::try_from(twice_avg_signed.max(0)).map_err(|_| VernierError::Overflow)?;
     // k is bp per unit of imbalance → divide by 2 · 10 000, round half up.
     let raw = u64::from(p.demand_k_bp)
         .checked_mul(twice_avg)
@@ -496,23 +499,38 @@ const CURVE_SCALE: i64 = 10_000;
 /// The leg's model spread at `d` days, linearly interpolated between the tenor knots and flat below the first
 /// knot, scaled by `CURVE_SCALE`. `d` above the last knot is refused by the callers (horizon).
 fn model_at_scaled(table: &[u16; 4], d: u16) -> Result<i64, VernierError> {
+    let knot = |k: usize| -> Result<(i64, i64), VernierError> {
+        let day = TENOR_DAYS
+            .get(k)
+            .copied()
+            .ok_or(VernierError::ForwardHorizon)?;
+        let model = table.get(k).copied().ok_or(VernierError::ForwardHorizon)?;
+        Ok((i64::from(day), i64::from(model)))
+    };
     let d = i64::from(d);
-    let first = i64::from(TENOR_DAYS[0]);
-    if d <= first {
-        return Ok(i64::from(table[0]) * CURVE_SCALE);
+    let (first_day, first_model) = knot(0)?;
+    if d <= first_day {
+        return first_model
+            .checked_mul(CURVE_SCALE)
+            .ok_or(VernierError::Overflow);
     }
     for k in 0..3 {
-        let (d0, d1) = (i64::from(TENOR_DAYS[k]), i64::from(TENOR_DAYS[k + 1]));
+        let (d0, m0) = knot(k)?;
+        let (d1, m1) = knot(k.checked_add(1).ok_or(VernierError::Overflow)?)?;
         if d <= d1 {
-            let (m0, m1) = (i64::from(table[k]), i64::from(table[k + 1]));
             // m0 + (m1 - m0) * (d - d0) / (d1 - d0), scaled; every operand is small so i64 is ample.
-            let num = (m1 - m0)
-                .checked_mul(d - d0)
+            let span = d1.checked_sub(d0).ok_or(VernierError::Overflow)?;
+            if span <= 0 {
+                return Err(VernierError::Overflow);
+            }
+            let num = m1
+                .checked_sub(m0)
+                .and_then(|rise| rise.checked_mul(d.checked_sub(d0)?))
                 .and_then(|x| x.checked_mul(CURVE_SCALE))
                 .ok_or(VernierError::Overflow)?;
             return m0
                 .checked_mul(CURVE_SCALE)
-                .and_then(|x| x.checked_add(num / (d1 - d0)))
+                .and_then(|x| x.checked_add(num.checked_div(span)?))
                 .ok_or(VernierError::Overflow);
         }
     }
@@ -527,11 +545,14 @@ fn model_at_scaled(table: &[u16; 4], d: u16) -> Result<i64, VernierError> {
 /// # Errors
 /// `ForwardHorizon` when `start_days + tenor.days()` exceeds `FORWARD_HORIZON_DAYS`; `Overflow` never in
 /// practice (inputs are bounded by the horizon and the `u16` tables).
-pub fn forward_model_bp(p: &Params, leg: Leg, start_days: u16, tenor: Tenor) -> Result<u16, VernierError> {
+pub fn forward_model_bp(
+    p: &Params,
+    leg: Leg,
+    start_days: u16,
+    tenor: Tenor,
+) -> Result<u16, VernierError> {
     let n = tenor.days();
-    let end = start_days
-        .checked_add(n)
-        .ok_or(VernierError::Overflow)?;
+    let end = start_days.checked_add(n).ok_or(VernierError::Overflow)?;
     if end > FORWARD_HORIZON_DAYS {
         return Err(VernierError::ForwardHorizon);
     }
@@ -540,7 +561,11 @@ pub fn forward_model_bp(p: &Params, leg: Leg, start_days: u16, tenor: Tenor) -> 
         Leg::Receive => &p.model_rec_bp,
     };
     let m_end = model_at_scaled(table, end)?;
-    let m_start = if start_days == 0 { 0 } else { model_at_scaled(table, start_days)? };
+    let m_start = if start_days == 0 {
+        0
+    } else {
+        model_at_scaled(table, start_days)?
+    };
     let num = m_end
         .checked_mul(i64::from(end))
         .and_then(|x| x.checked_sub(m_start.checked_mul(i64::from(start_days))?))
@@ -549,7 +574,13 @@ pub fn forward_model_bp(p: &Params, leg: Leg, start_days: u16, tenor: Tenor) -> 
         .checked_mul(CURVE_SCALE)
         .ok_or(VernierError::Overflow)?;
     // Round half up on a non-negative numerator; a negative forward is floored at zero.
-    let bp = if num <= 0 { 0 } else { (num + den / 2) / den };
+    let bp = if num <= 0 {
+        0
+    } else {
+        num.checked_add(den.checked_div(2).ok_or(VernierError::Overflow)?)
+            .and_then(|x| x.checked_div(den))
+            .ok_or(VernierError::Overflow)?
+    };
     u16::try_from(bp).map_err(|_| VernierError::Overflow)
 }
 
@@ -558,6 +589,10 @@ pub fn forward_model_bp(p: &Params, leg: Leg, start_days: u16, tenor: Tenor) -> 
 ///
 /// # Errors
 /// Whatever [`quote`] reports, and `ForwardHorizon` from [`forward_model_bp`].
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the spot quote's seven inputs plus the start; a struct would only rename them"
+)]
 pub fn quote_forward(
     spot_bp: u16,
     ema_bp: u16,
@@ -570,13 +605,21 @@ pub fn quote_forward(
 ) -> Result<Quote, VernierError> {
     let q = quote(spot_bp, ema_bp, tenor, leg, notional, pool, p)?;
     let fwd = i32::from(forward_model_bp(p, leg, start_days, tenor)?);
-    let model = if matches!(leg, Leg::Pay) { fwd } else { fwd.wrapping_neg() };
+    let model = if matches!(leg, Leg::Pay) {
+        fwd
+    } else {
+        fwd.wrapping_neg()
+    };
     let fixed = q
         .fixed_bp
         .checked_sub(q.model_bp)
         .and_then(|v| v.checked_add(model))
         .ok_or(VernierError::Overflow)?;
-    Ok(Quote { model_bp: model, fixed_bp: fixed, ..q })
+    Ok(Quote {
+        model_bp: model,
+        fixed_bp: fixed,
+        ..q
+    })
 }
 
 /// Mid forward quote (no demand term), the forward counterpart of [`quote_mid`].
@@ -598,7 +641,13 @@ pub fn quote_mid_forward(
         Leg::Pay => i32::from(spot_bp.max(ema_bp)),
         Leg::Receive => i32::from(spot_bp.min(ema_bp)),
     };
-    let sign = |v: i32| if matches!(leg, Leg::Pay) { v } else { v.wrapping_neg() };
+    let sign = |v: i32| {
+        if matches!(leg, Leg::Pay) {
+            v
+        } else {
+            v.wrapping_neg()
+        }
+    };
     reference
         .checked_add(sign(fwd))
         .and_then(|v| v.checked_add(sign(term)))
@@ -642,8 +691,16 @@ mod tests {
         p.model_rec_bp = [12, 12, 12, 12];
         for s in START_DAYS {
             for t in [Tenor::D28, Tenor::D60, Tenor::D90] {
-                assert_eq!(forward_model_bp(&p, Leg::Pay, s, t).unwrap(), 20, "pay {s} {t:?}");
-                assert_eq!(forward_model_bp(&p, Leg::Receive, s, t).unwrap(), 12, "rec {s} {t:?}");
+                assert_eq!(
+                    forward_model_bp(&p, Leg::Pay, s, t).unwrap(),
+                    20,
+                    "pay {s} {t:?}"
+                );
+                assert_eq!(
+                    forward_model_bp(&p, Leg::Receive, s, t).unwrap(),
+                    12,
+                    "rec {s} {t:?}"
+                );
             }
         }
     }
@@ -667,32 +724,67 @@ mod tests {
         assert_eq!(forward_model_bp(&P, Leg::Pay, 60, Tenor::D28).unwrap(), 48);
         assert_eq!(forward_model_bp(&P, Leg::Pay, 28, Tenor::D28).unwrap(), 30);
         assert_eq!(forward_model_bp(&P, Leg::Pay, 60, Tenor::D90).unwrap(), 63);
-        assert_eq!(forward_model_bp(&P, Leg::Receive, 28, Tenor::D60).unwrap(), 16);
-        assert_eq!(forward_model_bp(&P, Leg::Receive, 90, Tenor::D90).unwrap(), 24);
-        assert_eq!(forward_model_bp(&P, Leg::Receive, 60, Tenor::D28).unwrap(), 18);
+        assert_eq!(
+            forward_model_bp(&P, Leg::Receive, 28, Tenor::D60).unwrap(),
+            16
+        );
+        assert_eq!(
+            forward_model_bp(&P, Leg::Receive, 90, Tenor::D90).unwrap(),
+            24
+        );
+        assert_eq!(
+            forward_model_bp(&P, Leg::Receive, 60, Tenor::D28).unwrap(),
+            18
+        );
     }
 
     #[test]
     fn forward_refuses_the_horizon_and_zero_start_is_spot() {
-        assert_eq!(forward_model_bp(&P, Leg::Pay, 28, Tenor::D180), Err(VernierError::ForwardHorizon));
-        assert_eq!(forward_model_bp(&P, Leg::Pay, 91, Tenor::D90), Err(VernierError::ForwardHorizon));
+        assert_eq!(
+            forward_model_bp(&P, Leg::Pay, 28, Tenor::D180),
+            Err(VernierError::ForwardHorizon)
+        );
+        assert_eq!(
+            forward_model_bp(&P, Leg::Pay, 91, Tenor::D90),
+            Err(VernierError::ForwardHorizon)
+        );
         for t in TENORS {
-            assert_eq!(forward_model_bp(&P, Leg::Pay, 0, t).unwrap(), P.model_pay_bp[t.ix()]);
-            assert_eq!(forward_model_bp(&P, Leg::Receive, 0, t).unwrap(), P.model_rec_bp[t.ix()]);
+            assert_eq!(
+                forward_model_bp(&P, Leg::Pay, 0, t).unwrap(),
+                P.model_pay_bp[t.ix()]
+            );
+            assert_eq!(
+                forward_model_bp(&P, Leg::Receive, 0, t).unwrap(),
+                P.model_rec_bp[t.ix()]
+            );
         }
     }
 
     #[test]
     fn quote_forward_replaces_only_the_model_term() {
-        let pool = Pool { tvl: 12_640_000, util_pay_bp: 4_100, util_rec_bp: 2_100 };
+        let pool = Pool {
+            tvl: 12_640_000,
+            util_pay_bp: 4_100,
+            util_rec_bp: 2_100,
+        };
         let spot = quote(684, 671, Tenor::D60, Leg::Pay, 100_000, &pool, &P).unwrap();
         let fwd = quote_forward(684, 671, 28, Tenor::D60, Leg::Pay, 100_000, &pool, &P).unwrap();
-        assert_eq!((fwd.reference_bp, fwd.demand_bp, fwd.term_bp), (spot.reference_bp, spot.demand_bp, spot.term_bp));
+        assert_eq!(
+            (fwd.reference_bp, fwd.demand_bp, fwd.term_bp),
+            (spot.reference_bp, spot.demand_bp, spot.term_bp)
+        );
         assert_eq!(fwd.model_bp, 39);
         assert_eq!(fwd.fixed_bp, spot.fixed_bp - spot.model_bp + 39);
-        let rec = quote_forward(684, 671, 28, Tenor::D60, Leg::Receive, 100_000, &pool, &P).unwrap();
-        assert_eq!(rec.model_bp, -i32::from(forward_model_bp(&P, Leg::Receive, 28, Tenor::D60).unwrap()));
-        assert_eq!(quote_mid_forward(684, 671, 28, Tenor::D60, Leg::Pay, &P).unwrap(), fwd.fixed_bp - fwd.demand_bp);
+        let rec =
+            quote_forward(684, 671, 28, Tenor::D60, Leg::Receive, 100_000, &pool, &P).unwrap();
+        assert_eq!(
+            rec.model_bp,
+            -i32::from(forward_model_bp(&P, Leg::Receive, 28, Tenor::D60).unwrap())
+        );
+        assert_eq!(
+            quote_mid_forward(684, 671, 28, Tenor::D60, Leg::Pay, &P).unwrap(),
+            fwd.fixed_bp - fwd.demand_bp
+        );
     }
 
     #[test]
@@ -746,17 +838,18 @@ mod tests {
             pool.util_pay_bp = u16::try_from(open_pay * 10_000 / pool.tvl).unwrap();
         }
         assert_eq!(pool.util_pay_bp, 4_179);
-        // Crossing zero charges only the extending part, averaged over the whole fill (L-23): from −1 000 to
-        // +1 500 the part beyond zero has area 1 500² / 2 over a fill of 2 500, so twice the average is
-        // 1 500² / 2 500 = 900 and the spread is rhu(45 · 900 / 20 000) = 2. Crossing to an equal or smaller
-        // |imbalance| is a reducing trade and pays nothing, as before.
+        // Crossing zero charges only the part beyond the mirror point, averaged over the whole fill (L-23 as
+        // amended by external scan 2, finding 19): from −1 000 to +1 500 the extending area is
+        // (1 500² − 1 000²) / 2 over a fill of 2 500, so twice the average is 1 500 − 1 000 = 500 and the spread
+        // is rhu(45 · 500 / 20 000) = 1. Crossing to an equal or smaller |imbalance| is a reducing trade and pays
+        // nothing, as before.
         let cross = Pool {
             tvl: 10_000,
             util_pay_bp: 0,
             util_rec_bp: 1_000,
         };
         let q = quote(684, 671, Tenor::D90, Leg::Pay, 2_500, &cross, &P).unwrap();
-        assert_eq!((q.imbalance_after_bp, q.demand_bp), (1_500, 2));
+        assert_eq!((q.imbalance_after_bp, q.demand_bp), (1_500, 1));
         // The same 2 500 opened from a balanced book pays rhu(45 · 2 500 / 20 000) = 6; a crossing fill never
         // pays more than that, and a fill that barely crosses pays almost nothing.
         let flat = Pool {
@@ -814,6 +907,98 @@ mod tests {
 
     /// Basis swaps: the correlation offset reduces both legs' demand components by the same fraction and
     /// nothing else; 0 is the identity, 10 000 removes all demand, above that is refused.
+    /// Twice the average signed imbalance a fill of `d` bp pays from `before` (pay leg), unrounded and uncapped.
+    fn twice_avg_pay(before: i64, d: i64) -> i64 {
+        (2 * before + d).max(0)
+    }
+
+    #[test]
+    fn crossing_fill_pays_the_same_whether_traded_whole_or_at_the_mirror_point() {
+        // External scan 2, finding 19: with the earlier `|after|² / (|before| + |after|)` form a trader who opened
+        // 4 000 000 (free, reducing) and then 500 000 paid about 1.1 bp notional-weighted against 3 bp for the
+        // whole 4 500 000. Now both routes price the same area: the whole fill pays rhu(45 · 500 / 20 000) = 1 bp
+        // on 4 500 000 (exact 1.125 bp, 5 062.5 bp·USDC) and the second piece pays rhu(45 · 4 500 / 20 000) = 10 bp
+        // on 500 000 (exact 10.125 bp, the same 5 062.5 bp·USDC).
+        let pool = Pool {
+            tvl: 10_000_000,
+            util_pay_bp: 0,
+            util_rec_bp: 2_000,
+        };
+        let whole = quote(684, 671, Tenor::D180, Leg::Pay, 4_500_000, &pool, &P).unwrap();
+        assert_eq!((whole.imbalance_after_bp, whole.demand_bp), (2_500, 1));
+        let first = quote(684, 671, Tenor::D180, Leg::Pay, 4_000_000, &pool, &P).unwrap();
+        assert!(first.reduces_imbalance && first.demand_bp == 0);
+        let moved = Pool {
+            tvl: 10_000_000,
+            util_pay_bp: 4_000,
+            util_rec_bp: 2_000,
+        };
+        let second = quote(684, 671, Tenor::D180, Leg::Pay, 500_000, &moved, &P).unwrap();
+        assert_eq!((second.imbalance_after_bp, second.demand_bp), (2_500, 10));
+        assert_eq!(
+            twice_avg_pay(-2_000, 4_500) * 4_500,
+            twice_avg_pay(2_000, 500) * 500
+        );
+        // The same end state reached from a balanced book costs the area from zero: 2 500 bp over 2 500, which is
+        // rhu(45 · 2 500 / 20 000) = 6 bp, more than the crossing fill pays for the part it actually extends.
+        let flat = Pool {
+            tvl: 10_000_000,
+            util_pay_bp: 0,
+            util_rec_bp: 0,
+        };
+        assert_eq!(
+            quote(684, 671, Tenor::D180, Leg::Pay, 2_500_000, &flat, &P)
+                .unwrap()
+                .demand_bp,
+            6
+        );
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(4_000))]
+        /// The signed trapezoid telescopes: pieces that each extend the book pay exactly what the whole pays
+        /// before rounding, and no split of any fill pays less than the whole, because a reducing piece is
+        /// charged nothing rather than credited (external scan 2, finding 19).
+        #[test]
+        fn splitting_a_fill_never_pays_less_than_the_whole(
+            util_pay in 0u16..=4_800,
+            util_rec in 0u16..=4_800,
+            pieces in proptest::collection::vec(1u64..=1_000, 1..=4),
+            pay in any::<bool>(),
+        ) {
+            let leg = if pay { Leg::Pay } else { Leg::Receive };
+            let tvl = 10_000u64;
+            let mut pool = Pool { tvl, util_pay_bp: util_pay, util_rec_bp: util_rec };
+            let total: u64 = pieces.iter().sum();
+            let whole = demand_bp(&pool, leg, total, &P).unwrap();
+            let s = |before: i32| -> i64 { if pay { i64::from(before) } else { -i64::from(before) } };
+            let whole_area = twice_avg_pay(s(whole.1), i64::try_from(total).unwrap()) * i64::try_from(total).unwrap();
+            let mut split_area = 0i64;
+            let mut all_extend = true;
+            for piece in &pieces {
+                let (dem, before, after, reduces) = demand_bp(&pool, leg, *piece, &P).unwrap();
+                let d = i64::try_from(*piece).unwrap();
+                let twice = twice_avg_pay(s(before), d);
+                prop_assert_eq!(
+                    u64::from(dem),
+                    if reduces { 0 } else { ((45 * u64::try_from(twice).unwrap() + 10_000) / 20_000).min(60) }
+                );
+                all_extend &= !reduces;
+                split_area += twice * d;
+                // Apply the fill to the book exactly (tvl = 10 000 so one unit of notional is one bp).
+                let after_pay = if pay { i64::from(pool.util_pay_bp) + d } else { i64::from(pool.util_pay_bp) };
+                let after_rec = if pay { i64::from(pool.util_rec_bp) } else { i64::from(pool.util_rec_bp) + d };
+                prop_assert_eq!(after_pay - after_rec, i64::from(after));
+                pool.util_pay_bp = u16::try_from(after_pay).unwrap();
+                pool.util_rec_bp = u16::try_from(after_rec).unwrap();
+            }
+            prop_assert!(split_area >= whole_area, "split {split_area} < whole {whole_area}");
+            if all_extend {
+                prop_assert_eq!(split_area, whole_area);
+            }
+        }
+    }
+
     #[test]
     fn basis_offset_is_symmetric_bounded_and_touches_demand_only() {
         // Pool A has a pay-heavy book, so the pay leg pays 9 bp of demand; pool B is balanced, so the receive

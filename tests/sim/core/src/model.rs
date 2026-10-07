@@ -709,9 +709,11 @@ impl Model {
         let (spot, ema) = self.bench.for_quote(self.slot)?;
         let q = vernier::quote(spot, ema, tenor, leg, notional, &self.pool.vernier(), &self.pool.params).map_err(|e| match e {
             vernier::VernierError::EmptyPool | vernier::VernierError::MalformedUtilisation => Err::PoolInvariant,
-            vernier::VernierError::Overflow | vernier::VernierError::CorrelationOutOfRange => {
-                Err::Overflow
-            }
+            // A spot quote never prices a forward, so the horizon error cannot arise here; it is mapped rather
+            // than ignored so the model stays exhaustive over the engine's errors.
+            vernier::VernierError::Overflow
+            | vernier::VernierError::CorrelationOutOfRange
+            | vernier::VernierError::ForwardHorizon => Err::Overflow,
         })?;
         Ok(q.fixed_bp)
     }

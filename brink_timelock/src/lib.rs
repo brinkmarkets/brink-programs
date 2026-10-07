@@ -14,16 +14,22 @@
 //!   may cancel one to return its rent to the proposer. Executed operations are closed in the same transaction.
 //! * The guardian is a separate key (hardware wallet or security council) with exactly one power: cancel.
 //!   It cannot queue, execute or change the delay, so a compromised guardian can only delay, never attack.
-//! * `Upgrade` operations pin the buffer address and the buffer's content hash is checked at execution, so a
-//!   buffer swapped after review fails to execute.
+//! * `Upgrade` operations are queued through `queue_upgrade`, which reads the buffer on chain: the buffer's
+//!   authority must already be the `["authority"]` PDA, so nothing can rewrite it once queued, and the program
+//!   takes the content hash itself. The hash is checked again at execution. A cancelled upgrade's buffer is
+//!   closed back to the proposer through `cancel_upgrade`.
 //! * `SetUpgradeAuthority` (handing a program to a new timelock or governance account) is itself timelocked, as is
 //!   `SetDelay` and `SetRoles`. There is no path that bypasses the delay.
-//! * `Invoke` is the generic delayed call: a queued operation pins the target program, the hash of the full
-//!   account list (keys and flags) and the hash of the instruction data. At execution the executor supplies the
-//!   accounts and data, both hashes are recomputed and compared, and the `["authority"]` PDA signs the CPI in
-//!   place of whichever account in the list is the PDA. This is how the PDA exercises `Global.authority` and
-//!   `Registry.authority` (review finding F-13, ADR-011): every mode relaxation, parameter change, publisher set
-//!   change, pool creation and authority transfer is visible for the full delay before it can execute.
+//! * `Invoke` is the generic delayed call, queued through `queue_invoke` with its full account list and
+//!   instruction data as arguments: the program hashes both on chain and publishes them in the queue event, so
+//!   the contents of every delayed call are disclosed the moment it is queued (external scan 2, finding 18). At
+//!   execution the executor supplies the accounts and data, both hashes are recomputed and compared, and the
+//!   `["authority"]` PDA signs the CPI in place of whichever account in the list is the PDA. This is how the PDA
+//!   exercises `Global.authority` and `Registry.authority` (review finding F-13, ADR-011): every mode relaxation,
+//!   parameter change, publisher set change, pool creation and authority transfer is visible for the full delay
+//!   before it can execute.
+//! * The generic `queue` accepts only the kinds that are fully specified by their arguments (`SetDelay`,
+//!   `SetRoles`, `SetUpgradeAuthority`); an `Upgrade` or `Invoke` presented to it is refused.
 //! * Emergency response is intentionally outside this program: the swap AMM's guardian can `Halt` the protocol
 //!   instantly without a delay, which is the correct split (pausing is cheap and reversible; upgrading is neither).
 //!
@@ -86,24 +92,26 @@ pub mod brink_timelock {
         Ok(())
     }
 
-    /// Queues an operation. Only the proposer. The eta is fixed at queue time from the current delay.
+    /// Queues a `SetDelay`, `SetRoles` or `SetUpgradeAuthority` operation. Only the proposer. The eta is fixed at
+    /// queue time from the current delay. Upgrades and invokes, whose contents are not carried by their kind,
+    /// go through `queue_upgrade` and `queue_invoke`.
     pub fn queue(ctx: Context<Queue>, kind: OperationKind) -> Result<()> {
-        let clock = Clock::get()?;
-        let t = &mut ctx.accounts.timelock;
+        require!(
+            !matches!(
+                kind,
+                OperationKind::Upgrade { .. } | OperationKind::Invoke { .. }
+            ),
+            TimelockError::Undisclosed
+        );
         validate_kind(&kind)?;
-        let op = &mut ctx.accounts.operation;
-        op.timelock = t.key();
-        op.nonce = t.nonce;
-        op.kind = kind;
-        op.queued_slot = clock.slot;
-        op.eta_slot = clock
-            .slot
-            .checked_add(t.delay_slots)
-            .ok_or(TimelockError::Overflow)?;
-        op.state = OperationState::Queued;
-        op.bump = ctx.bumps.operation;
-        op.payer = ctx.accounts.proposer.key();
-        t.nonce = t.nonce.checked_add(1).ok_or(TimelockError::Overflow)?;
+        record(
+            &mut ctx.accounts.timelock,
+            &mut ctx.accounts.operation,
+            ctx.bumps.operation,
+            ctx.accounts.proposer.key(),
+            kind,
+        )?;
+        let op = &ctx.accounts.operation;
         emit_cpi!(Queued {
             operation: op.key(),
             nonce: op.nonce,
@@ -113,11 +121,165 @@ pub mod brink_timelock {
         Ok(())
     }
 
+    /// Queues an `Upgrade` with the buffer disclosed: the buffer is read here, its authority must be the
+    /// `["authority"]` PDA so that it cannot be rewritten after review, and its content hash is taken by the
+    /// program rather than supplied by the proposer. Only the proposer.
+    pub fn queue_upgrade(ctx: Context<QueueUpgrade>) -> Result<()> {
+        let program = ctx.accounts.target_program.key();
+        let buffer = ctx.accounts.buffer.key();
+        let buffer_hash = {
+            let data = ctx.accounts.buffer.try_borrow_data()?;
+            require!(
+                buffer_authority(&data)? == ctx.accounts.authority.key(),
+                TimelockError::BufferAuthority
+            );
+            let body = data
+                .get(bpf_loader_upgradeable::UpgradeableLoaderState::size_of_buffer_metadata()..)
+                .ok_or(TimelockError::BufferMalformed)?;
+            require!(!body.is_empty(), TimelockError::BufferMalformed);
+            hash(body).to_bytes()
+        };
+        let kind = OperationKind::Upgrade {
+            program,
+            buffer,
+            buffer_hash,
+        };
+        validate_kind(&kind)?;
+        record(
+            &mut ctx.accounts.timelock,
+            &mut ctx.accounts.operation,
+            ctx.bumps.operation,
+            ctx.accounts.proposer.key(),
+            kind,
+        )?;
+        let op = &ctx.accounts.operation;
+        emit_cpi!(Queued {
+            operation: op.key(),
+            nonce: op.nonce,
+            eta_slot: op.eta_slot,
+            kind
+        });
+        Ok(())
+    }
+
+    /// Queues an `Invoke` with its contents disclosed: the full account list and the instruction data are
+    /// arguments, hashed on chain and published in the queue event. Only the proposer. The `["authority"]` PDA
+    /// is recorded as a signer wherever it appears, as the executor will present it.
+    pub fn queue_invoke(
+        ctx: Context<QueueInvoke>,
+        metas: Vec<InvokeMeta>,
+        data: Vec<u8>,
+    ) -> Result<()> {
+        let program = ctx.accounts.target_program.key();
+        require!(
+            ctx.accounts.target_program.executable,
+            TimelockError::AccountMismatch
+        );
+        let pda = ctx.accounts.authority.key();
+        let metas: Vec<InvokeMeta> = metas
+            .into_iter()
+            .map(|m| InvokeMeta {
+                pubkey: m.pubkey,
+                is_signer: m.is_signer || m.pubkey == pda,
+                is_writable: m.is_writable,
+            })
+            .collect();
+        for m in &metas {
+            require!(
+                m.pubkey != bpf_loader_upgradeable::ID,
+                TimelockError::InvokeTargetForbidden
+            );
+        }
+        let account_metas: Vec<AccountMeta> = metas
+            .iter()
+            .map(|m| AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: m.is_signer,
+                is_writable: m.is_writable,
+            })
+            .collect();
+        let kind = OperationKind::Invoke {
+            program,
+            accounts_hash: invoke_accounts_hash(&program, &account_metas),
+            data_hash: invoke_data_hash(&data),
+        };
+        validate_kind(&kind)?;
+        record(
+            &mut ctx.accounts.timelock,
+            &mut ctx.accounts.operation,
+            ctx.bumps.operation,
+            ctx.accounts.proposer.key(),
+            kind,
+        )?;
+        let op = &ctx.accounts.operation;
+        emit_cpi!(Queued {
+            operation: op.key(),
+            nonce: op.nonce,
+            eta_slot: op.eta_slot,
+            kind
+        });
+        emit_cpi!(InvokeDisclosed {
+            operation: op.key(),
+            program,
+            metas,
+            data,
+        });
+        Ok(())
+    }
+
+    /// Cancels a queued `Upgrade` and closes its buffer, whose authority is the PDA, back to the proposer that
+    /// paid for it. Same permission as `cancel`.
+    pub fn cancel_upgrade(ctx: Context<CancelUpgrade>) -> Result<()> {
+        let t = &ctx.accounts.timelock;
+        let s = ctx.accounts.signer.key();
+        let expired =
+            Clock::get()?.slot > ctx.accounts.operation.eta_slot.saturating_add(GRACE_SLOTS);
+        require!(
+            s == t.proposer || s == t.guardian || expired,
+            TimelockError::Unauthorised
+        );
+        let OperationKind::Upgrade { buffer, .. } = ctx.accounts.operation.kind else {
+            return Err(TimelockError::KindMismatch.into());
+        };
+        require_keys_eq!(
+            ctx.accounts.buffer.key(),
+            buffer,
+            TimelockError::AccountMismatch
+        );
+        let ix = bpf_loader_upgradeable::close(
+            &buffer,
+            &ctx.accounts.payer.key(),
+            &ctx.accounts.authority.key(),
+        );
+        let seeds: &[&[u8]] = &[b"authority", &[t.authority_bump]];
+        invoke_signed(
+            &ix,
+            &[
+                ctx.accounts.buffer.to_account_info(),
+                ctx.accounts.payer.to_account_info(),
+                ctx.accounts.authority.to_account_info(),
+            ],
+            &[seeds],
+        )?;
+        emit_cpi!(Cancelled {
+            operation: ctx.accounts.operation.key(),
+            by: s
+        });
+        Ok(())
+    }
+
     /// Cancels a queued operation. Proposer or guardian at any time; anyone once the operation has expired
     /// (`eta + GRACE_SLOTS` passed). The account is closed and rent returned to the proposer.
     pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
         let t = &ctx.accounts.timelock;
         let s = ctx.accounts.signer.key();
+        // An upgrade pins a buffer whose authority is the timelock's PDA; closing the operation without the
+        // buffer would strand the buffer's lamports, so an upgrade is cancelled through `cancel_upgrade`
+        // (review of external scan 2, A-5).
+        require!(
+            !matches!(ctx.accounts.operation.kind, OperationKind::Upgrade { .. }),
+            TimelockError::KindMismatch
+        );
         let expired =
             Clock::get()?.slot > ctx.accounts.operation.eta_slot.saturating_add(GRACE_SLOTS);
         require!(
@@ -360,12 +522,50 @@ fn validate_roles(proposer: Pubkey, executor: Pubkey, guardian: Pubkey) -> Resul
     Ok(())
 }
 
+/// Writes a queued operation and advances the nonce.
+fn record(
+    t: &mut Account<Timelock>,
+    op: &mut Account<Operation>,
+    bump: u8,
+    payer: Pubkey,
+    kind: OperationKind,
+) -> Result<()> {
+    let clock = Clock::get()?;
+    op.timelock = t.key();
+    op.nonce = t.nonce;
+    op.kind = kind;
+    op.queued_slot = clock.slot;
+    op.eta_slot = clock
+        .slot
+        .checked_add(t.delay_slots)
+        .ok_or(TimelockError::Overflow)?;
+    op.state = OperationState::Queued;
+    op.bump = bump;
+    op.payer = payer;
+    t.nonce = t.nonce.checked_add(1).ok_or(TimelockError::Overflow)?;
+    Ok(())
+}
+
+/// The authority of a loader `Buffer` account from its serialised state: a `u32` tag of 1 followed by an
+/// `Option<Pubkey>`. A buffer without an authority is immutable and cannot be used for an upgrade.
+pub fn buffer_authority(data: &[u8]) -> Result<Pubkey> {
+    let tag = data.get(0..4).ok_or(TimelockError::BufferMalformed)?;
+    require!(tag == [1, 0, 0, 0], TimelockError::BufferMalformed);
+    let some = data.get(4).ok_or(TimelockError::BufferMalformed)?;
+    require!(*some == 1, TimelockError::BufferAuthority);
+    let key = data.get(5..37).ok_or(TimelockError::BufferMalformed)?;
+    let bytes: [u8; 32] = key.try_into().map_err(|_| TimelockError::BufferMalformed)?;
+    Ok(Pubkey::new_from_array(bytes))
+}
+
 fn validate_kind(k: &OperationKind) -> Result<()> {
     match *k {
-        OperationKind::SetDelay { delay_slots } => require!(
-            (MIN_DELAY_SLOTS..=MAX_DELAY_SLOTS).contains(&delay_slots),
-            TimelockError::DelayOutOfRange
-        ),
+        OperationKind::SetDelay { delay_slots } => {
+            require!(
+                (MIN_DELAY_SLOTS..=MAX_DELAY_SLOTS).contains(&delay_slots),
+                TimelockError::DelayOutOfRange
+            )
+        }
         OperationKind::SetRoles {
             proposer,
             executor,
@@ -377,10 +577,12 @@ fn validate_kind(k: &OperationKind) -> Result<()> {
             program != buffer && program != Pubkey::default() && buffer != Pubkey::default(),
             TimelockError::AccountMismatch
         ),
-        OperationKind::SetUpgradeAuthority { new_authority, .. } => require!(
-            new_authority != Pubkey::default(),
-            TimelockError::AccountMismatch
-        ),
+        OperationKind::SetUpgradeAuthority { new_authority, .. } => {
+            require!(
+                new_authority != Pubkey::default(),
+                TimelockError::AccountMismatch
+            )
+        }
         // Upgrades go through `Upgrade` (buffer hash); the timelock never calls itself (the runtime forbids the
         // reentrancy anyway) and never the system program on its own behalf.
         OperationKind::Invoke { program, .. } => require!(
@@ -462,6 +664,14 @@ pub enum OperationKind {
     },
 }
 
+/// One account of a disclosed `Invoke`: the key and the privilege flags the executor will present.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct InvokeMeta {
+    pub pubkey: Pubkey,
+    pub is_signer: bool,
+    pub is_writable: bool,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 /// `Executed` and `Cancelled` are transient: the account is closed in the same transaction, so a stored
 /// operation is always `Queued`. Kept for the event payloads and clients.
@@ -528,6 +738,66 @@ pub struct Queue<'info> {
     #[account(init, payer = proposer, space = 8 + Operation::INIT_SPACE, seeds = [b"op", timelock.nonce.to_le_bytes().as_ref()], bump)]
     pub operation: Account<'info, Operation>,
     pub system_program: Program<'info, System>,
+}
+
+#[event_cpi]
+#[derive(Accounts)]
+pub struct QueueUpgrade<'info> {
+    #[account(mut, seeds = [b"timelock"], bump = timelock.bump, has_one = proposer)]
+    pub timelock: Account<'info, Timelock>,
+    #[account(mut)]
+    pub proposer: Signer<'info>,
+    #[account(init, payer = proposer, space = 8 + Operation::INIT_SPACE, seeds = [b"op", timelock.nonce.to_le_bytes().as_ref()], bump)]
+    pub operation: Account<'info, Operation>,
+    /// CHECK: the PDA that must already be the buffer's authority.
+    #[account(seeds = [b"authority"], bump = timelock.authority_bump)]
+    pub authority: UncheckedAccount<'info>,
+    /// CHECK: the program to upgrade; loader-owned and executable.
+    #[account(executable, owner = bpf_loader_upgradeable::ID @ TimelockError::AccountMismatch)]
+    pub target_program: UncheckedAccount<'info>,
+    /// CHECK: loader buffer; read for its authority and content hash.
+    #[account(owner = bpf_loader_upgradeable::ID @ TimelockError::AccountMismatch)]
+    pub buffer: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[event_cpi]
+#[derive(Accounts)]
+pub struct QueueInvoke<'info> {
+    #[account(mut, seeds = [b"timelock"], bump = timelock.bump, has_one = proposer)]
+    pub timelock: Account<'info, Timelock>,
+    #[account(mut)]
+    pub proposer: Signer<'info>,
+    #[account(init, payer = proposer, space = 8 + Operation::INIT_SPACE, seeds = [b"op", timelock.nonce.to_le_bytes().as_ref()], bump)]
+    pub operation: Account<'info, Operation>,
+    /// CHECK: the PDA that signs the call at execution.
+    #[account(seeds = [b"authority"], bump = timelock.authority_bump)]
+    pub authority: UncheckedAccount<'info>,
+    /// CHECK: the program the call targets; must be executable.
+    pub target_program: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[event_cpi]
+#[derive(Accounts)]
+pub struct CancelUpgrade<'info> {
+    #[account(seeds = [b"timelock"], bump = timelock.bump)]
+    pub timelock: Account<'info, Timelock>,
+    pub signer: Signer<'info>,
+    /// CHECK: rent destination for the operation and the buffer; the account that paid for the operation.
+    #[account(mut, address = operation.payer @ TimelockError::AccountMismatch)]
+    pub payer: UncheckedAccount<'info>,
+    #[account(mut, close = payer, has_one = timelock, constraint = operation.state == OperationState::Queued @ TimelockError::NotQueued)]
+    pub operation: Account<'info, Operation>,
+    /// CHECK: the buffer's authority.
+    #[account(seeds = [b"authority"], bump = timelock.authority_bump)]
+    pub authority: UncheckedAccount<'info>,
+    /// CHECK: loader buffer pinned in the operation; closed to `payer`.
+    #[account(mut)]
+    pub buffer: UncheckedAccount<'info>,
+    /// CHECK: the upgradeable loader.
+    #[account(address = bpf_loader_upgradeable::ID)]
+    pub loader: UncheckedAccount<'info>,
 }
 
 #[event_cpi]
@@ -645,6 +915,14 @@ pub struct Cancelled {
     pub operation: Pubkey,
     pub by: Pubkey,
 }
+/// The full contents of a queued `Invoke`, published when it is queued.
+#[event]
+pub struct InvokeDisclosed {
+    pub operation: Pubkey,
+    pub program: Pubkey,
+    pub metas: Vec<InvokeMeta>,
+    pub data: Vec<u8>,
+}
 #[event]
 pub struct Executed {
     pub operation: Pubkey,
@@ -683,6 +961,10 @@ pub enum TimelockError {
     InvokeDataMismatch,
     #[msg("only the program's upgrade authority may initialise")]
     NotUpgradeAuthority,
+    #[msg("upgrades and invokes are queued through queue_upgrade and queue_invoke, which disclose their contents")]
+    Undisclosed,
+    #[msg("the buffer's authority must be the timelock's authority PDA before it is queued")]
+    BufferAuthority,
 }
 
 #[cfg(test)]
@@ -746,6 +1028,23 @@ mod tests {
             validate_kind(&kind).is_err(),
             "SetRoles is held to the same rule"
         );
+    }
+
+    #[test]
+    fn buffer_authority_is_read_from_the_loader_header() {
+        let pda = Pubkey::new_from_array([7; 32]);
+        let mut data = vec![0u8; 40];
+        data[0] = 1;
+        data[4] = 1;
+        data[5..37].copy_from_slice(pda.as_ref());
+        assert_eq!(buffer_authority(&data).unwrap(), pda);
+        let mut none = data.clone();
+        none[4] = 0;
+        assert!(buffer_authority(&none).is_err(), "immutable buffer");
+        let mut program = data.clone();
+        program[0] = 2;
+        assert!(buffer_authority(&program).is_err(), "not a buffer");
+        assert!(buffer_authority(&data[..20]).is_err(), "short");
     }
 
     #[test]

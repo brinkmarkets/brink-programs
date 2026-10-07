@@ -321,6 +321,76 @@
       ]
     },
     {
+      "name": "revalidate",
+      "docs": [
+        "Permissionless: flags a benchmark whose accepted value no longer rests on a quorum of registered, fresh",
+        "observations (`support_lost`), which degrades it until the next accepted value. Never clears the flag."
+      ],
+      "discriminator": [
+        158,
+        248,
+        174,
+        199,
+        116,
+        196,
+        109,
+        110
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "benchmark"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  101,
+                  110,
+                  99,
+                  104,
+                  109,
+                  97,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "benchmark.id",
+                "account": "Benchmark"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "set_authority",
       "docs": [
         "Governance: hands the registry to a new authority, which co-signs so a mistyped key cannot take it.",
@@ -684,6 +754,21 @@
       "code": 6012,
       "name": "Unauthorised",
       "msg": "signer is not permitted to do this"
+    },
+    {
+      "code": 6013,
+      "name": "BenchmarkNotWritable",
+      "msg": "benchmark passed for revalidation must be writable"
+    },
+    {
+      "code": 6014,
+      "name": "TooManyBenchmarks",
+      "msg": "more benchmarks passed than one transaction revalidates"
+    },
+    {
+      "code": 6015,
+      "name": "WrongRegistry",
+      "msg": "benchmark belongs to another registry"
     }
   ],
   "types": [
@@ -691,7 +776,13 @@
       "name": "Benchmark",
       "docs": [
         "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
-        "`version`; both programs upgrade together when it changes."
+        "`version`; both programs upgrade together when it changes.",
+        "",
+        "Space is declared by hand (`impl Space`) because the fixings ring is held in a `Box`: the account is about",
+        "2.7 KB and a by-value deserialisation of it needs two copies in one SBF stack frame, above the 4 KB frame",
+        "limit (the toolchain reports the overflow at build time). With the ring on the heap the struct is about 700",
+        "bytes on the stack and the ring is copied once, in its own frame. The wire layout is unchanged: a boxed array",
+        "serialises as the array."
       ],
       "type": {
         "kind": "struct",
@@ -862,7 +953,8 @@
               "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
               "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
               "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
-              "`[u128; N]` so that loading the account is a copy, not a per-element decode."
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode; boxed so that copy is made",
+              "once, outside the account's own stack frame."
             ],
             "type": {
               "array": [
@@ -888,11 +980,21 @@
             "type": "u64"
           },
           {
+            "name": "support_lost",
+            "docs": [
+              "The observations behind the last accepted value no longer amount to a quorum of currently registered,",
+              "fresh publishers: set by `remove_publisher` and `set_publishers` for the benchmarks passed to them, by",
+              "`revalidate`, and by `publish` when fewer registered observations than the quorum are fresh. Degrades the",
+              "benchmark until the next accepted value clears it (external scan 2, finding 8)."
+            ],
+            "type": "bool"
+          },
+          {
             "name": "_reserved",
             "type": {
               "array": [
                 "u8",
-                12
+                11
               ]
             }
           }

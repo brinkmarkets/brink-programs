@@ -1,0 +1,1173 @@
+{
+  "address": "Boj38zJFfsN72DBL2nrJEfk1ewskn11EbdikgHMBX7v2",
+  "metadata": {
+    "name": "brink_venue",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink venue adapter interface and the devnet venue: a USDC placement whose receipt accrues the published benchmark from a funded reserve"
+  },
+  "instructions": [
+    {
+      "name": "create_venue",
+      "docs": [
+        "Creates the devnet venue for a benchmark: its receipt mint and USDC reserve. Upgrade authority only."
+      ],
+      "discriminator": [
+        162,
+        203,
+        21,
+        140,
+        131,
+        95,
+        73,
+        87
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "This program's own `ProgramData`; binds `authority` to the upgrade authority."
+          ]
+        },
+        {
+          "name": "benchmark"
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "benchmark"
+              }
+            ]
+          }
+        },
+        {
+          "name": "receipt_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  101,
+                  105,
+                  112,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "fund",
+      "docs": [
+        "Anyone adds USDC to the reserve that pays accrued yield."
+      ],
+      "discriminator": [
+        218,
+        188,
+        111,
+        221,
+        152,
+        113,
+        174,
+        7
+      ],
+      "accounts": [
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "funder",
+          "signer": true
+        },
+        {
+          "name": "funder_usdc",
+          "writable": true
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "place",
+      "docs": [
+        "Places USDC and mints receipts at the current index."
+      ],
+      "discriminator": [
+        143,
+        53,
+        56,
+        40,
+        41,
+        16,
+        5,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_usdc",
+          "writable": true
+        },
+        {
+          "name": "owner_receipts",
+          "writable": true
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "receipt_mint",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_receipts",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "redeem",
+      "docs": [
+        "Burns receipts and pays their value at the current index, scaled by the fraction of all claims the",
+        "reserve holds (`Venue::payout`). `min_amount` is the caller's floor: pass the full value to refuse a",
+        "haircut."
+      ],
+      "discriminator": [
+        184,
+        12,
+        86,
+        149,
+        70,
+        196,
+        97,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_usdc",
+          "writable": true
+        },
+        {
+          "name": "owner_receipts",
+          "writable": true
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "receipt_mint",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "receipts",
+          "type": "u64"
+        },
+        {
+          "name": "min_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_paused",
+      "docs": [
+        "Pauses or resumes placements. Redemptions are never paused."
+      ],
+      "discriminator": [
+        91,
+        60,
+        125,
+        192,
+        176,
+        225,
+        166,
+        218
+      ],
+      "accounts": [
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "venue"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "touch",
+      "docs": [
+        "Brings the index up to date without moving funds, so readers see the current value. After a gap of more",
+        "than `MAX_WALK_DAYS` one call advances the anchor by that many midnights; call it until `Touched.complete`."
+      ],
+      "discriminator": [
+        80,
+        157,
+        106,
+        220,
+        181,
+        72,
+        101,
+        81
+      ],
+      "accounts": [
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Venue",
+      "discriminator": [
+        8,
+        155,
+        85,
+        226,
+        234,
+        173,
+        42,
+        242
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Funded",
+      "discriminator": [
+        67,
+        84,
+        56,
+        88,
+        192,
+        12,
+        201,
+        177
+      ]
+    },
+    {
+      "name": "Placed",
+      "discriminator": [
+        182,
+        12,
+        15,
+        19,
+        155,
+        29,
+        175,
+        156
+      ]
+    },
+    {
+      "name": "Redeemed",
+      "discriminator": [
+        14,
+        29,
+        183,
+        71,
+        31,
+        165,
+        107,
+        38
+      ]
+    },
+    {
+      "name": "Touched",
+      "discriminator": [
+        143,
+        160,
+        73,
+        49,
+        43,
+        104,
+        41,
+        110
+      ]
+    },
+    {
+      "name": "VenueCreated",
+      "discriminator": [
+        43,
+        254,
+        195,
+        223,
+        129,
+        54,
+        53,
+        83
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotAuthority",
+      "msg": "Only the venue's authority may do this"
+    },
+    {
+      "code": 6001,
+      "name": "NotUpgradeAuthority",
+      "msg": "Only the program's upgrade authority may create a venue"
+    },
+    {
+      "code": 6002,
+      "name": "Zero",
+      "msg": "Amount must be positive"
+    },
+    {
+      "code": 6003,
+      "name": "BelowMinimum",
+      "msg": "Output below the caller's minimum"
+    },
+    {
+      "code": 6004,
+      "name": "ReserveShort",
+      "msg": "The reserve cannot cover this redemption; fund it"
+    },
+    {
+      "code": 6005,
+      "name": "Paused",
+      "msg": "Placements are paused"
+    },
+    {
+      "code": 6006,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6007,
+      "name": "TokenOwner",
+      "msg": "Token account owner mismatch"
+    },
+    {
+      "code": 6008,
+      "name": "Mint",
+      "msg": "Token mint mismatch"
+    },
+    {
+      "code": 6009,
+      "name": "Benchmark",
+      "msg": "Benchmark does not match the venue"
+    },
+    {
+      "code": 6010,
+      "name": "NotAnchored",
+      "msg": "Venue has no midnight anchor yet; touch it first"
+    },
+    {
+      "code": 6011,
+      "name": "NeedsTouch",
+      "msg": "The index is more than the walk bound behind now; touch the venue first"
+    },
+    {
+      "code": 6012,
+      "name": "Underfunded",
+      "msg": "The reserve does not fund every claim; fund it before placing"
+    }
+  ],
+  "types": [
+    {
+      "name": "Benchmark",
+      "docs": [
+        "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
+        "`version`; both programs upgrade together when it changes.",
+        "",
+        "Space is declared by hand (`impl Space`) because the fixings ring is held in a `Box`: the account is about",
+        "2.7 KB and a by-value deserialisation of it needs two copies in one SBF stack frame, above the 4 KB frame",
+        "limit (the toolchain reports the overflow at build time). With the ring on the heap the struct is about 700",
+        "bytes on the stack and the ring is copied once, in its own frame. The wire layout is unchanged: a boxed array",
+        "serialises as the array."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "ema_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "unix_ts",
+            "type": "i64"
+          },
+          {
+            "name": "accrual_e18",
+            "type": "u128"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "band_bp",
+            "type": "u16"
+          },
+          {
+            "name": "half_life_slots",
+            "type": "u64"
+          },
+          {
+            "name": "min_interval_slots",
+            "type": "u64"
+          },
+          {
+            "name": "published",
+            "type": "bool"
+          },
+          {
+            "name": "publish_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "prev_value_bp",
+            "docs": [
+              "Value held over the most recent accrual segment `[prev_unix_ts, unix_ts]` (maths finding M-2)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "prev_unix_ts",
+            "docs": [
+              "Start of the most recent accrual segment; equals `unix_ts` until the second accepted value."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "max_drift_bp",
+            "docs": [
+              "Drift bound (S-6): the value may move at most this far from `drift_anchor_bp` within one window."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "drift_window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "drift_anchor_bp",
+            "type": "u16"
+          },
+          {
+            "name": "drift_anchor_slot",
+            "type": "u64"
+          },
+          {
+            "name": "clamped",
+            "docs": [
+              "The last accepted value was clamped by the band or the drift bound."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "disputed",
+            "docs": [
+              "The last aggregation had a quorum of fresh observations that did not agree; the value was not moved."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "support",
+            "docs": [
+              "Observations that supported the last accepted value. `1` means a single-publisher (devnet) registry."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "observations",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Observation"
+                  }
+                },
+                5
+              ]
+            }
+          },
+          {
+            "name": "ema_milli_bp",
+            "docs": [
+              "EMA at bp x 1 000 (maths finding M-6). `ema_bp` is `rhu(ema_milli_bp / 1 000)`; at most",
+              "`MAX_RATE_BP x 1 000`, so it fits `u32` and the `u16` narrowing of `ema_bp` cannot fail."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_first_day",
+            "docs": [
+              "UTC day number (unix seconds / 86 400) of the oldest fixing ever written; 0 until the first midnight the",
+              "benchmark lives through."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_head_day",
+            "docs": [
+              "UTC day number of the most recent fixing written."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixings",
+            "docs": [
+              "Ring of `FIXING_DAYS` daily fixings: the cumulative accrual (`accrual_e18` units) at 00:00 UTC of day `d`",
+              "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
+              "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
+              "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode; boxed so that copy is made",
+              "once, outside the account's own stack frame."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                2048
+              ]
+            }
+          },
+          {
+            "name": "ema_slot",
+            "docs": [
+              "Slot at which the EMA last moved (or was confirmed equal to its input); the decay of the next step is",
+              "measured from here, not from the last publication (M-11)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accepted_slot",
+            "docs": [
+              "Slot of the transaction that last accepted a value. `slot` is the freshness of the data behind it (M-12);",
+              "this is when the benchmark itself last moved, used to widen the band after an outage."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "support_lost",
+            "docs": [
+              "The observations behind the last accepted value no longer amount to a quorum of currently registered,",
+              "fresh publishers: set by `remove_publisher` and `set_publishers` for the benchmarks passed to them, by",
+              "`revalidate`, and by `publish` when fewer registered observations than the quorum are fresh. Degrades the",
+              "benchmark until the next accepted value clears it (external scan 2, finding 8)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                11
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Funded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "funder",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Observation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Placed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "receipts",
+            "type": "u64"
+          },
+          {
+            "name": "index_e18",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Redeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipts",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "USDC paid."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "index_e18",
+            "type": "u128"
+          },
+          {
+            "name": "value",
+            "docs": [
+              "The receipts' value at the index; `amount` is below it by `shortfall` when the reserve is short of the",
+              "yield it owes."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "shortfall",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Touched",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "index_e18",
+            "type": "u128"
+          },
+          {
+            "name": "anchor_day",
+            "type": "u32"
+          },
+          {
+            "name": "complete",
+            "docs": [
+              "False when the walk bound stopped the anchor short of today; touch again."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Venue",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "index_e18",
+            "docs": [
+              "USDC per receipt base unit, scaled by 1e18."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "bench_accrual_e18",
+            "docs": [
+              "The benchmark's cumulative accrual at the last touch."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "tail_bps",
+            "docs": [
+              "Accrual counted at the last touch beyond the benchmark's last publication, in bp seconds."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "last_ts",
+            "type": "i64"
+          },
+          {
+            "name": "principal",
+            "docs": [
+              "USDC placed and not yet redeemed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "receipts",
+            "docs": [
+              "Receipt supply mirror."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "funded",
+            "docs": [
+              "USDC added to the reserve by `fund`, cumulative."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "anchor_index_e18",
+            "docs": [
+              "The index at 00:00 UTC of `anchor_day`, exact: the compounding anchor every reading is reconstructed from."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "anchor_day",
+            "docs": [
+              "UTC day number of the anchor midnight; zero on a version 1 account until its first accrual under this",
+              "build, which places the anchor from the stored index."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "anchor_accrual",
+            "docs": [
+              "The benchmark's cumulative accrual at the anchor midnight, in `accrual_e18` units."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                28
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "VenueCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

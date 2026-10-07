@@ -21,7 +21,7 @@ pub fn align_up_to_day(ts: i64) -> Result<i64> {
     } else {
         start
             .checked_add(SECONDS_PER_DAY)
-            .ok_or(BrinkError::Overflow.into())
+            .ok_or_else(|| BrinkError::Overflow.into())
     }
 }
 
@@ -381,7 +381,9 @@ mod tests {
             queue_first_slot: 0,
             limited_window_start: 0,
             limited_window_notional: 0,
-            _reserved: [0; 24],
+            reserve_placed: 0,
+            reserve_active: 0,
+            _reserved: [0; 15],
         };
         rebase_utilisation(&mut p).unwrap();
         assert_eq!(p.util_rec_bp, 4_828);
@@ -397,6 +399,7 @@ mod tests {
             vernier::leg_capacity(&p.vernier_pool(), vernier::Leg::Pay),
             0
         );
+        assert_eq!(p.leg_capacity(vernier::Leg::Pay), 0);
         // Above 100 percent saturates rather than failing the narrowing.
         p.tvl = 100_000;
         rebase_utilisation(&mut p).unwrap();
@@ -407,6 +410,41 @@ mod tests {
         rebase_utilisation(&mut p).unwrap();
         assert_eq!((p.util_pay_bp, p.util_rec_bp), (0, 0));
         assert!(p.assert_caps().is_ok());
+    }
+
+    /// External scan 2, finding 23: the caps are exact on the raw notionals, not on the floored utilisation.
+    #[test]
+    fn caps_and_capacity_are_exact_on_raw_notionals() {
+        let mut p = crate::instructions::swap::test_pool();
+        p.tvl = 1_000_000_000_000;
+        // 48.0099999999 percent floors to 4 800 bp and used to pass; it is one unit over the exact cap.
+        p.open_pay_notional = 480_099_999_999;
+        rebase_utilisation(&mut p).unwrap();
+        assert_eq!(p.util_pay_bp, 4_800);
+        assert!(vernier::pool_invariants_hold(&p.vernier_pool()));
+        assert!(p.assert_caps().is_err());
+        p.open_pay_notional = 480_000_000_000;
+        assert!(p.assert_caps().is_ok());
+        assert_eq!(p.leg_capacity(vernier::Leg::Pay), 0);
+        // Exact room: floor(cap x tvl / 10 000) - open, on whichever cap binds.
+        p.open_pay_notional = 479_999_999_999;
+        assert_eq!(p.leg_capacity(vernier::Leg::Pay), 1);
+        assert_eq!(p.leg_capacity(vernier::Leg::Receive), 320_000_000_001);
+        p.open_rec_notional = 320_000_000_001;
+        assert!(p.assert_caps().is_ok());
+        assert_eq!(p.leg_capacity(vernier::Leg::Pay), 0);
+        assert_eq!(p.leg_capacity(vernier::Leg::Receive), 0);
+        p.open_rec_notional += 1;
+        assert!(p.assert_caps().is_err());
+        // Odd TVL: the floor on cap x tvl / 10 000 is the exact largest admissible notional.
+        p.open_pay_notional = 0;
+        p.open_rec_notional = 0;
+        p.tvl = 1_000_001;
+        assert_eq!(p.leg_capacity(vernier::Leg::Pay), 480_000);
+        p.open_pay_notional = 480_000;
+        assert!(p.assert_caps().is_ok());
+        p.open_pay_notional = 480_001;
+        assert!(p.assert_caps().is_err());
     }
     fn swap_strategy() -> impl Strategy<Value = (bool, u64, u128, u16, i64, i64)> {
         (
@@ -473,7 +511,9 @@ mod tests {
             fees_buyback_accrued: 0,
             fees_treasury_accrued: 0,
             withdraw_reserved: 0,
-            _reserved: [0; 24],
+            reserve_placed: 0,
+            reserve_active: 0,
+            _reserved: [0; 15],
         }
     }
     proptest! {
@@ -516,7 +556,7 @@ mod tests {
             p.tvl = 500_000;
             let c = p.book_value_clamped(a_now_bp_s * brink_index::ACCRUAL_SCALE, v, now).unwrap();
             prop_assert!((-1_000_000..=500_000).contains(&c));
-            prop_assert!(p.effective_tvl_for_withdraw(a_now_bp_s * brink_index::ACCRUAL_SCALE, v, now).unwrap() <= 500_000);
+            prop_assert!(p.effective_tvl_for_withdraw(a_now_bp_s * brink_index::ACCRUAL_SCALE, v, now, 0).unwrap() <= 500_000);
             for t in &terms {
                 p.book_sub(t).unwrap();
             }
@@ -549,21 +589,21 @@ mod tests {
         q.book_add(&BookTerms::for_swap(LegKind::PayFixed, n, 0, 700, o, m).unwrap())
             .unwrap();
         assert_eq!(
-            q.effective_tvl_for_deposit(a_now, 800, now).unwrap(),
+            q.effective_tvl_for_deposit(a_now, 800, now, 0).unwrap(),
             10_000_000_000 - 2_465_753_424
         );
         assert_eq!(
-            q.effective_tvl_for_withdraw(a_now, 800, now).unwrap(),
+            q.effective_tvl_for_withdraw(a_now, 800, now, 0).unwrap(),
             10_000_000_000 - 2_465_753_424
         );
         // Rate at 600: traders owe; deposits price it in, withdrawals do not.
         let a_low = 600u128 * 30 * 86_400 * brink_index::ACCRUAL_SCALE;
         assert_eq!(
-            q.effective_tvl_for_deposit(a_low, 600, now).unwrap(),
+            q.effective_tvl_for_deposit(a_low, 600, now, 0).unwrap(),
             10_000_000_000 + 2_465_753_424
         );
         assert_eq!(
-            q.effective_tvl_for_withdraw(a_low, 600, now).unwrap(),
+            q.effective_tvl_for_withdraw(a_low, 600, now, 0).unwrap(),
             10_000_000_000
         );
     }

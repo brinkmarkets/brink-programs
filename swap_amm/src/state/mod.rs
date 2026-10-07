@@ -156,7 +156,78 @@ pub struct Pool {
     /// request, zero when none. A new swap may not consume the capacity an eligible epoch is waiting for.
     pub queued_shares: u64,
     pub queue_first_slot: u64,
-    pub _reserved: [u8; 24],
+    /// USDC principal placed at the pool's reserve venue (the Stacked Treasuries reserve, `PoolReserve`). It is
+    /// LP capital that is not in the vault, so conservation counts it: `vault + reserve_placed >= accounted`.
+    /// Zero for a pool without a reserve.
+    pub reserve_placed: u64,
+    /// 1 once `admin_enable_reserve` has created the pool's `PoolReserve`; payouts then report a short working
+    /// balance by name instead of failing inside the token program.
+    pub reserve_active: u8,
+    pub _reserved: [u8; 15],
+}
+
+/// The Stacked Treasuries reserve of one pool: idle LP capital placed at a venue that accrues a published Treasury
+/// benchmark, so the LPs earn that base yield under the pool's spread. The pool keeps a working balance in its
+/// vault for payouts; the permissionless `crank_rebalance_reserve` places what is above the band, recalls what is
+/// below it and realises the accrued yield into LP capital, paying the cranker a bounty from that yield only.
+#[account]
+#[derive(InitSpace)]
+pub struct PoolReserve {
+    pub version: u8,
+    pub pool: Pubkey,
+    /// `brink_venue` venue account the capital is placed at.
+    pub venue: Pubkey,
+    pub receipt_mint: Pubkey,
+    /// Receipt token account owned by the pool PDA.
+    pub receipts: Pubkey,
+    pub params: ReserveParams,
+    pub last_rebalance_slot: u64,
+    /// Yield realised into LP capital to date, USDC 6 dp, after bounties.
+    pub yield_realised: u64,
+    pub bounties_paid: u64,
+    pub placed_lifetime: u64,
+    pub recalled_lifetime: u64,
+    pub rebalances: u32,
+    /// No new placements while paused; recalls and harvests continue.
+    pub paused: bool,
+    pub bump: u8,
+    /// Slot of the last placement: the placement interval runs from here, so a harvest-only or recall-only crank
+    /// cannot postpone placing idle capital (external scan 2, finding 12).
+    pub last_place_slot: u64,
+    pub _reserved: [u8; 56],
+}
+
+/// Reserve calibration, set by the authority. Shares are of LP capital (`Pool::tvl`) in basis points.
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, Default, InitSpace,
+)]
+pub struct ReserveParams {
+    /// Working balance the vault keeps for payouts, as a share of LP capital.
+    pub working_bps: u16,
+    /// Hysteresis either side of the target before the crank moves anything.
+    pub band_bps: u16,
+    /// Ceiling on principal placed, as a share of LP capital.
+    pub max_place_bps: u16,
+    /// Slots between two placements; a recall for a short working balance is never delayed.
+    pub min_interval_slots: u64,
+    /// Cap on the crank bounty, USDC 6 dp. The bounty is one percent of the yield harvested, never principal.
+    pub bounty_cap: u64,
+}
+
+impl ReserveParams {
+    pub const MAX_BOUNTY_CAP: u64 = 10_000_000; // 10 USDC
+    pub fn validate(&self) -> Result<()> {
+        require!(
+            (500..=10_000).contains(&self.working_bps)
+                && self.band_bps >= 10
+                && self.band_bps <= self.working_bps
+                && self.max_place_bps <= 10_000u16.saturating_sub(self.working_bps)
+                && self.max_place_bps > 0
+                && self.bounty_cap <= Self::MAX_BOUNTY_CAP,
+            crate::errors::BrinkError::ReserveParams
+        );
+        Ok(())
+    }
 }
 
 /// Buckets in the maturity ladder: more than the longest tenor in days.
@@ -229,7 +300,7 @@ impl BookSide {
         num.checked_div(
             i128::try_from(crate::instructions::math::BP_SECONDS_PER_YEAR).map_err(|_| Overflow)?,
         )
-        .ok_or(Overflow.into())
+        .ok_or_else(|| Overflow.into())
     }
 }
 
@@ -324,7 +395,7 @@ impl Pool {
     pub fn fees_held(&self) -> Result<u64> {
         self.fees_buyback_accrued
             .checked_add(self.fees_treasury_accrued)
-            .ok_or(crate::errors::BrinkError::Overflow.into())
+            .ok_or_else(|| crate::errors::BrinkError::Overflow.into())
     }
     /// Charges `notional` against the Limited-mode budget: at most `cap` of new notional per pool per
     /// `LIMITED_WINDOW_SECS`, whichever trader opens it and however it is split (simulation S-2). The window starts
@@ -388,7 +459,7 @@ impl Pool {
         self.book_pay
             .value(a, value_bp, now)?
             .checked_add(self.book_rec.value(a, value_bp, now)?)
-            .ok_or(crate::errors::BrinkError::Overflow.into())
+            .ok_or_else(|| crate::errors::BrinkError::Overflow.into())
     }
     /// `book_value` with each side clamped to what can actually change hands on that side: its traders can win
     /// at most the collateral they posted and lose at most the same (every close clamps to collateral), and the
@@ -396,6 +467,15 @@ impl Pool {
     /// netted against an uncollectible loss on the other (M-4). Offsets within one leg remain aggregate: see the
     /// cap-out close in `liquidate`, which closes any swap whose unbounded mark has reached its collateral, and
     /// the collateral floors in the calibration bounds.
+    ///
+    /// Accepted residual (external scan 2, finding 13): within one leg a mark beyond one swap's collateral can
+    /// offset another swap's mark, so between the moment a position's unbounded mark passes its collateral and
+    /// the moment the cap-out crank closes it the aggregate can differ from the sum of per-swap clamped marks.
+    /// Pricing from per-swap marks would need every open swap in every LP instruction; the design keeps O(1)
+    /// aggregates and bounds the residual instead: the cap-out close is permissionless and pays a bounty from
+    /// the position, the collateral floors keep the rate move needed to reach a cap about 6.5 percentage points
+    /// annualised over the tenor, and the window is the crank's latency. A depositor who exploits it must also
+    /// hold the position that is capped, and gives the pool the collateral on the other side when it closes.
     pub fn book_value_clamped(
         &self,
         accrual_now_e18: u128,
@@ -507,42 +587,57 @@ impl Pool {
         );
         Ok(())
     }
-    /// The share-supply mirror must agree with the mint wherever the mint is present (M-18).
-    pub fn assert_share_supply(&self, mint_supply: u64) -> Result<()> {
+    /// Reconciles the share-supply mirror with the mint wherever the mint is present (M-18). Only the pool can
+    /// mint, so a live supply above the mirror is an invariant breach and is refused; a live supply below it
+    /// means a holder burned shares directly through the token program, which forfeits that capital to the
+    /// remaining LPs, and the mirror follows the mint rather than refusing every LP path (external scan 2,
+    /// finding 4). Returns the supply the caller should price on.
+    pub fn reconcile_share_supply(&mut self, mint_supply: u64) -> Result<u64> {
         require!(
-            self.share_supply == mint_supply,
+            mint_supply <= self.share_supply,
             crate::errors::BrinkError::ShareSupplyMismatch
         );
-        Ok(())
+        self.share_supply = mint_supply;
+        Ok(mint_supply)
     }
     /// LP capital for pricing a deposit: fair value, `tvl` less what the pool owes the book or plus what the book
     /// owes the pool. A depositor neither captures a settlement that is already visible nor dilutes the LPs who
     /// bore the risk (maths finding M-12, simulation S-4).
+    ///
+    /// `pending_yield` is the reserve's accrued, funded, bounty-net yield not yet harvested
+    /// (`reserve::pending_yield`), zero for a pool without a reserve. It is part of the capital every share
+    /// already owns, so it is priced in before shares are issued or redeemed: a deposit cannot buy into a
+    /// harvest that is about to be realised, and an exit does not forfeit one (external scan 2, finding 6).
     pub fn effective_tvl_for_deposit(
         &self,
         accrual_now_e18: u128,
         value_bp: u16,
         now: i64,
+        pending_yield: u64,
     ) -> Result<u64> {
         let v = self.book_value_clamped(accrual_now_e18, value_bp, now)?;
         let e = i128::from(self.tvl)
-            .checked_sub(v)
+            .checked_add(i128::from(pending_yield))
+            .and_then(|x| x.checked_sub(v))
             .ok_or(crate::errors::BrinkError::Overflow)?;
         Ok(u64::try_from(e.max(0)).unwrap_or(u64::MAX))
     }
     /// LP capital for pricing a withdrawal: conservative, `tvl` less what the pool owes the book, with no credit
-    /// for unrealised trader losses (they are credited to the LPs who remain when the swaps close).
+    /// for unrealised trader losses (they are credited to the LPs who remain when the swaps close), plus the
+    /// reserve's pending yield as for a deposit.
     pub fn effective_tvl_for_withdraw(
         &self,
         accrual_now_e18: u128,
         value_bp: u16,
         now: i64,
+        pending_yield: u64,
     ) -> Result<u64> {
         let v = self
             .book_value_clamped(accrual_now_e18, value_bp, now)?
             .max(0);
         let e = i128::from(self.tvl)
-            .checked_sub(v)
+            .checked_add(i128::from(pending_yield))
+            .and_then(|x| x.checked_sub(v))
             .ok_or(crate::errors::BrinkError::Overflow)?;
         Ok(u64::try_from(e.max(0)).unwrap_or(u64::MAX))
     }
@@ -552,7 +647,7 @@ impl Pool {
             .checked_add(self.collateral_held)
             .and_then(|x| x.checked_add(self.fees_held().ok()?))
             .and_then(|x| x.checked_add(self.withdraw_reserved))
-            .ok_or(crate::errors::BrinkError::Overflow.into())
+            .ok_or_else(|| crate::errors::BrinkError::Overflow.into())
     }
     #[must_use]
     pub fn vernier_pool(&self) -> vernier::Pool {
@@ -579,11 +674,57 @@ impl Pool {
             );
             return Ok(());
         }
+        // Exact on the raw notionals: `open x 10 000 <= cap x tvl` for each leg and for both together. The
+        // utilisation fields are floored to whole basis points, so a check on them alone admitted up to one
+        // basis point of TVL per leg above the limit (external scan 2, finding 23). The library's own check
+        // (`vernier::pool_invariants_hold`) remains the mirror's view and is implied by this one.
+        let tvl = u128::from(self.tvl);
+        let pay = u128::from(self.open_pay_notional)
+            .checked_mul(10_000)
+            .ok_or(crate::errors::BrinkError::Overflow)?;
+        let rec = u128::from(self.open_rec_notional)
+            .checked_mul(10_000)
+            .ok_or(crate::errors::BrinkError::Overflow)?;
+        let leg_cap = tvl
+            .checked_mul(u128::from(vernier::CAP_LEG_BP))
+            .ok_or(crate::errors::BrinkError::Overflow)?;
+        let total_cap = tvl
+            .checked_mul(u128::from(vernier::CAP_TOTAL_BP))
+            .ok_or(crate::errors::BrinkError::Overflow)?;
         require!(
-            vernier::pool_invariants_hold(&self.vernier_pool()),
+            pay <= leg_cap
+                && rec <= leg_cap
+                && pay
+                    .checked_add(rec)
+                    .ok_or(crate::errors::BrinkError::Overflow)?
+                    <= total_cap,
             crate::errors::BrinkError::PoolInvariant
         );
         Ok(())
+    }
+    /// Exact capacity left on a leg (notional units): the largest notional whose addition keeps both caps exact
+    /// on the raw notionals, `floor(cap x tvl / 10 000) - open`. Zero when the leg or the pool is at cap. This
+    /// replaces the library's `leg_capacity` on the entry paths, which worked from the floored utilisation and
+    /// so reported up to one basis point of TVL too much room (external scan 2, finding 23).
+    #[must_use]
+    pub fn leg_capacity(&self, leg: vernier::Leg) -> u64 {
+        let tvl = u128::from(self.tvl);
+        let (open_leg, open_total) = {
+            let pay = u128::from(self.open_pay_notional);
+            let rec = u128::from(self.open_rec_notional);
+            (
+                match leg {
+                    vernier::Leg::Pay => pay,
+                    vernier::Leg::Receive => rec,
+                },
+                pay.saturating_add(rec),
+            )
+        };
+        let leg_room =
+            (tvl.saturating_mul(u128::from(vernier::CAP_LEG_BP)) / 10_000).saturating_sub(open_leg);
+        let total_room = (tvl.saturating_mul(u128::from(vernier::CAP_TOTAL_BP)) / 10_000)
+            .saturating_sub(open_total);
+        u64::try_from(leg_room.min(total_room)).unwrap_or(u64::MAX)
     }
     /// Conservation and well-formedness. Called at the end of every instruction that touches the pool, including
     /// every close path: a settle, cancel or liquidation is never refused because the pool is over a cap or
@@ -598,10 +739,22 @@ impl Pool {
         // transferring dust straight to the vault; a surplus is instead folded into LP capital by the
         // permissionless `sync_vault` instruction.
         let expected = self.accounted()?;
-        require!(
-            vault_amount >= expected,
-            crate::errors::BrinkError::Conservation
-        );
+        // Capital placed at the reserve venue is LP capital held outside the vault (`PoolReserve`).
+        let held = vault_amount
+            .checked_add(self.reserve_placed)
+            .ok_or(crate::errors::BrinkError::Overflow)?;
+        require!(held >= expected, crate::errors::BrinkError::Conservation);
+        Ok(())
+    }
+    /// A payout from the vault needs the working balance to cover it. Without a reserve the token program
+    /// reports the shortfall; with one, the pool names it so the caller runs `crank_rebalance_reserve` first.
+    pub fn require_working(&self, vault_amount: u64, amount: u64) -> Result<()> {
+        if self.reserve_active == 1 {
+            require!(
+                vault_amount >= amount,
+                crate::errors::BrinkError::WorkingBalanceShort
+            );
+        }
         Ok(())
     }
 }
@@ -717,7 +870,13 @@ impl Swap {
                 self.matures_ts,
             )
         } else {
-            BookTerms::for_forward(self.leg, self.notional, self.fixed_bp, self.start_ts, self.matures_ts)
+            BookTerms::for_forward(
+                self.leg,
+                self.notional,
+                self.fixed_bp,
+                self.start_ts,
+                self.matures_ts,
+            )
         }
     }
     /// Flags for one leg of a basis swap.
@@ -818,6 +977,10 @@ pub struct ModeChanged {
 pub struct CalibrationQueued {
     pub pool: Pubkey,
     pub effective_slot: u64,
+}
+#[event]
+pub struct CalibrationCancelled {
+    pub pool: Pubkey,
 }
 #[event]
 pub struct PoolCreated {

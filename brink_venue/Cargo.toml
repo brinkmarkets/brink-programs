@@ -1,0 +1,29 @@
+[package]
+name = "brink_venue"
+version = "0.1.0"
+description = "Brink venue adapter interface and the devnet venue: a USDC placement whose receipt accrues the published benchmark from a funded reserve"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "brink_venue"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build", "brink_index/idl-build"]
+anchor-debug = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = { workspace = true, features = ["event-cpi"] }
+anchor-spl = { workspace = true }
+brink_index = { path = "../brink_index", features = ["cpi"] }
+
+[lints]
+workspace = true

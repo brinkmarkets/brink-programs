@@ -1,0 +1,1703 @@
+{
+  "address": "ASYzAAxpLwQW5XwdL1GJbpQ15onLR6uM1HBSCRTza9sz",
+  "metadata": {
+    "name": "brink_split",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink yield splitting: principal and yield tokens with a shared maturity over an interest-bearing unit (pool shares or venue receipts)"
+  },
+  "instructions": [
+    {
+      "name": "create_market",
+      "docs": [
+        "Creates a market over a unit with a maturity. Upgrade authority only."
+      ],
+      "discriminator": [
+        103,
+        226,
+        97,
+        235,
+        200,
+        188,
+        251,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "source"
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "The venue's benchmark, required for a venue market (the origin rate is the venue's index now)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "sy_mint"
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sy_mint"
+              },
+              {
+                "kind": "arg",
+                "path": "args.maturity_ts"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sy_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pt_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yt_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateMarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mint_py",
+      "docs": [
+        "Deposits SY and mints equal PT and YT worth its asset value at the origin rate, less the mint fee."
+      ],
+      "discriminator": [
+        102,
+        239,
+        239,
+        226,
+        103,
+        163,
+        247,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.sy_mint",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.maturity_ts",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_sy",
+          "writable": true
+        },
+        {
+          "name": "owner_pt",
+          "writable": true
+        },
+        {
+          "name": "owner_yt",
+          "writable": true
+        },
+        {
+          "name": "sy_vault",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "fee_account",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "pt_mint",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "yt_mint",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "sy_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "sy_amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_py",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "redeem_pt",
+      "docs": [
+        "After settlement, PT redeems its share of the principal side."
+      ],
+      "discriminator": [
+        249,
+        183,
+        230,
+        236,
+        7,
+        233,
+        13,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.sy_mint",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.maturity_ts",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_sy",
+          "writable": true
+        },
+        {
+          "name": "side_mint",
+          "docs": [
+            "PT or YT, checked against the market by the instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_side",
+          "writable": true
+        },
+        {
+          "name": "sy_vault",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "sy_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "redeem_py",
+      "docs": [
+        "Burns equal PT and YT and returns the SY that backs them, at the origin rate. Allowed until the market",
+        "settles."
+      ],
+      "discriminator": [
+        90,
+        24,
+        208,
+        71,
+        105,
+        66,
+        189,
+        201
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.sy_mint",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.maturity_ts",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_sy",
+          "writable": true
+        },
+        {
+          "name": "owner_pt",
+          "writable": true
+        },
+        {
+          "name": "owner_yt",
+          "writable": true
+        },
+        {
+          "name": "sy_vault",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "pt_mint",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "yt_mint",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "sy_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "py_amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_sy",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "redeem_yt",
+      "docs": [
+        "After settlement, YT redeems its share of the yield side."
+      ],
+      "discriminator": [
+        1,
+        74,
+        100,
+        10,
+        218,
+        215,
+        221,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.sy_mint",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.maturity_ts",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_sy",
+          "writable": true
+        },
+        {
+          "name": "side_mint",
+          "docs": [
+            "PT or YT, checked against the market by the instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_side",
+          "writable": true
+        },
+        {
+          "name": "sy_vault",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "sy_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "settle",
+      "docs": [
+        "At or after maturity, anyone freezes the maturity rate and divides the vault between principal and",
+        "yield. A venue market's rate is the venue's index at the maturity instant, whenever this is called."
+      ],
+      "discriminator": [
+        175,
+        42,
+        185,
+        87,
+        144,
+        131,
+        102,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.sy_mint",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.maturity_ts",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "source",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "docs": [
+            "The venue's benchmark, required for a venue market: the maturity rate is reconstructed from its fixings."
+          ],
+          "optional": true
+        },
+        {
+          "name": "sy_vault",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "pt_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "yt_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "sweep_fees",
+      "docs": [
+        "Anyone moves the accrued mint fees, half and half, to SY accounts owned by the owners of the AMM's",
+        "treasury and buyback escrow."
+      ],
+      "discriminator": [
+        175,
+        225,
+        98,
+        71,
+        118,
+        66,
+        34,
+        148
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.sy_mint",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.maturity_ts",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "amm_global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "treasury",
+          "docs": [
+            "The AMM's treasury USDC account; its owner receives the treasury half in SY."
+          ],
+          "relations": [
+            "amm_global"
+          ]
+        },
+        {
+          "name": "buyback_escrow",
+          "docs": [
+            "The AMM's buyback escrow USDC account; its owner receives the buyback half in SY."
+          ],
+          "relations": [
+            "amm_global"
+          ]
+        },
+        {
+          "name": "treasury_sy",
+          "writable": true
+        },
+        {
+          "name": "buyback_sy",
+          "writable": true
+        },
+        {
+          "name": "fee_account",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "sy_mint",
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Market",
+      "discriminator": [
+        219,
+        190,
+        213,
+        55,
+        0,
+        227,
+        198,
+        154
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "FeesSwept",
+      "discriminator": [
+        96,
+        218,
+        115,
+        136,
+        74,
+        170,
+        202,
+        172
+      ]
+    },
+    {
+      "name": "MarketCreated",
+      "discriminator": [
+        88,
+        184,
+        130,
+        231,
+        226,
+        84,
+        6,
+        58
+      ]
+    },
+    {
+      "name": "MarketSettled",
+      "discriminator": [
+        237,
+        212,
+        22,
+        175,
+        201,
+        117,
+        215,
+        99
+      ]
+    },
+    {
+      "name": "Minted",
+      "discriminator": [
+        174,
+        131,
+        21,
+        57,
+        88,
+        117,
+        114,
+        121
+      ]
+    },
+    {
+      "name": "RedeemedPair",
+      "discriminator": [
+        159,
+        238,
+        91,
+        46,
+        167,
+        27,
+        100,
+        164
+      ]
+    },
+    {
+      "name": "RedeemedSide",
+      "discriminator": [
+        32,
+        206,
+        87,
+        128,
+        70,
+        191,
+        24,
+        82
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotUpgradeAuthority",
+      "msg": "Only the program's upgrade authority may create a market"
+    },
+    {
+      "code": 6001,
+      "name": "Term",
+      "msg": "The term must be between one day and one year"
+    },
+    {
+      "code": 6002,
+      "name": "Source",
+      "msg": "The source account is not the unit's program account for this SY mint"
+    },
+    {
+      "code": 6003,
+      "name": "Zero",
+      "msg": "Amount must be positive"
+    },
+    {
+      "code": 6004,
+      "name": "Settled",
+      "msg": "The market has settled; redeem PT and YT separately"
+    },
+    {
+      "code": 6005,
+      "name": "Matured",
+      "msg": "The market has matured; settle it, then redeem"
+    },
+    {
+      "code": 6006,
+      "name": "NotMatured",
+      "msg": "The market has not matured"
+    },
+    {
+      "code": 6007,
+      "name": "NotSettled",
+      "msg": "The market has not settled"
+    },
+    {
+      "code": 6008,
+      "name": "BelowMinimum",
+      "msg": "Output below the minimum"
+    },
+    {
+      "code": 6009,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6010,
+      "name": "TokenOwner",
+      "msg": "Token account owner mismatch"
+    },
+    {
+      "code": 6011,
+      "name": "Mint",
+      "msg": "Token mint mismatch"
+    },
+    {
+      "code": 6012,
+      "name": "FeeDestination",
+      "msg": "Fee destinations must be owned by the owners of the AMM's treasury and buyback escrow"
+    },
+    {
+      "code": 6013,
+      "name": "Midnight",
+      "msg": "A venue market must mature at 00:00 UTC"
+    },
+    {
+      "code": 6014,
+      "name": "Benchmark",
+      "msg": "A venue market needs the venue's benchmark account"
+    },
+    {
+      "code": 6015,
+      "name": "Version",
+      "msg": "This market was created by a previous build and no longer mints or redeems pairs"
+    }
+  ],
+  "types": [
+    {
+      "name": "Benchmark",
+      "docs": [
+        "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
+        "`version`; both programs upgrade together when it changes.",
+        "",
+        "Space is declared by hand (`impl Space`) because the fixings ring is held in a `Box`: the account is about",
+        "2.7 KB and a by-value deserialisation of it needs two copies in one SBF stack frame, above the 4 KB frame",
+        "limit (the toolchain reports the overflow at build time). With the ring on the heap the struct is about 700",
+        "bytes on the stack and the ring is copied once, in its own frame. The wire layout is unchanged: a boxed array",
+        "serialises as the array."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "ema_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "unix_ts",
+            "type": "i64"
+          },
+          {
+            "name": "accrual_e18",
+            "type": "u128"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "band_bp",
+            "type": "u16"
+          },
+          {
+            "name": "half_life_slots",
+            "type": "u64"
+          },
+          {
+            "name": "min_interval_slots",
+            "type": "u64"
+          },
+          {
+            "name": "published",
+            "type": "bool"
+          },
+          {
+            "name": "publish_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "prev_value_bp",
+            "docs": [
+              "Value held over the most recent accrual segment `[prev_unix_ts, unix_ts]` (maths finding M-2)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "prev_unix_ts",
+            "docs": [
+              "Start of the most recent accrual segment; equals `unix_ts` until the second accepted value."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "max_drift_bp",
+            "docs": [
+              "Drift bound (S-6): the value may move at most this far from `drift_anchor_bp` within one window."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "drift_window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "drift_anchor_bp",
+            "type": "u16"
+          },
+          {
+            "name": "drift_anchor_slot",
+            "type": "u64"
+          },
+          {
+            "name": "clamped",
+            "docs": [
+              "The last accepted value was clamped by the band or the drift bound."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "disputed",
+            "docs": [
+              "The last aggregation had a quorum of fresh observations that did not agree; the value was not moved."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "support",
+            "docs": [
+              "Observations that supported the last accepted value. `1` means a single-publisher (devnet) registry."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "observations",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Observation"
+                  }
+                },
+                5
+              ]
+            }
+          },
+          {
+            "name": "ema_milli_bp",
+            "docs": [
+              "EMA at bp x 1 000 (maths finding M-6). `ema_bp` is `rhu(ema_milli_bp / 1 000)`; at most",
+              "`MAX_RATE_BP x 1 000`, so it fits `u32` and the `u16` narrowing of `ema_bp` cannot fail."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_first_day",
+            "docs": [
+              "UTC day number (unix seconds / 86 400) of the oldest fixing ever written; 0 until the first midnight the",
+              "benchmark lives through."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_head_day",
+            "docs": [
+              "UTC day number of the most recent fixing written."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixings",
+            "docs": [
+              "Ring of `FIXING_DAYS` daily fixings: the cumulative accrual (`accrual_e18` units) at 00:00 UTC of day `d`",
+              "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
+              "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
+              "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode; boxed so that copy is made",
+              "once, outside the account's own stack frame."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                2048
+              ]
+            }
+          },
+          {
+            "name": "ema_slot",
+            "docs": [
+              "Slot at which the EMA last moved (or was confirmed equal to its input); the decay of the next step is",
+              "measured from here, not from the last publication (M-11)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accepted_slot",
+            "docs": [
+              "Slot of the transaction that last accepted a value. `slot` is the freshness of the data behind it (M-12);",
+              "this is when the benchmark itself last moved, used to widen the band after an outage."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "support_lost",
+            "docs": [
+              "The observations behind the last accepted value no longer amount to a quorum of currently registered,",
+              "fresh publishers: set by `remove_publisher` and `set_publishers` for the benchmarks passed to them, by",
+              "`revalidate`, and by `publish` when fewer registered observations than the quorum are fresh. Degrades the",
+              "benchmark until the next accepted value clears it (external scan 2, finding 8)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                11
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreateMarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_kind",
+            "type": {
+              "defined": {
+                "name": "SourceKind"
+              }
+            }
+          },
+          {
+            "name": "maturity_ts",
+            "type": "i64"
+          },
+          {
+            "name": "min_mint",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeesSwept",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Global",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "buyback_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "OperatingMode"
+              }
+            }
+          },
+          {
+            "name": "param_delay_slots",
+            "type": "u64"
+          },
+          {
+            "name": "limited_mode_cap",
+            "type": "u64"
+          },
+          {
+            "name": "pool_count",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "source_kind",
+            "type": {
+              "defined": {
+                "name": "SourceKind"
+              }
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "sy_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "sy_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "pt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "yt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "maturity_ts",
+            "type": "i64"
+          },
+          {
+            "name": "created_ts",
+            "type": "i64"
+          },
+          {
+            "name": "min_mint",
+            "type": "u64"
+          },
+          {
+            "name": "rate_at_maturity_e18",
+            "type": "u128"
+          },
+          {
+            "name": "settled",
+            "type": "bool"
+          },
+          {
+            "name": "sy_locked",
+            "type": "u64"
+          },
+          {
+            "name": "py_supply",
+            "type": "u64"
+          },
+          {
+            "name": "sy_for_pt",
+            "type": "u64"
+          },
+          {
+            "name": "sy_for_yt",
+            "type": "u64"
+          },
+          {
+            "name": "pt_at_settle",
+            "type": "u64"
+          },
+          {
+            "name": "yt_at_settle",
+            "type": "u64"
+          },
+          {
+            "name": "fees",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "rate_origin_e18",
+            "docs": [
+              "The unit's rate when the market was created, 1e18 scale: every pair is minted and redeemed at it. Zero",
+              "on a version 1 market."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                48
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "sy_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "yt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "maturity_ts",
+            "type": "i64"
+          },
+          {
+            "name": "rate_origin_e18",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "rate_e18",
+            "type": "u128"
+          },
+          {
+            "name": "sy_total",
+            "type": "u64"
+          },
+          {
+            "name": "sy_for_pt",
+            "type": "u64"
+          },
+          {
+            "name": "sy_for_yt",
+            "type": "u64"
+          },
+          {
+            "name": "pt_supply",
+            "type": "u64"
+          },
+          {
+            "name": "yt_supply",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Minted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "sy_in",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "py",
+            "type": "u64"
+          },
+          {
+            "name": "rate_e18",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Observation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperatingMode",
+      "docs": [
+        "Kill switch and graceful degradation, designed in from day one."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Normal"
+          },
+          {
+            "name": "Limited"
+          },
+          {
+            "name": "WithdrawOnly"
+          },
+          {
+            "name": "Halted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedeemedPair",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "py",
+            "type": "u64"
+          },
+          {
+            "name": "sy_out",
+            "type": "u64"
+          },
+          {
+            "name": "rate_e18",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedeemedSide",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal",
+            "type": "bool"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "sy_out",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SourceKind",
+      "docs": [
+        "Where the SY's rate comes from."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "BrinkPool"
+          },
+          {
+            "name": "BrinkVenue"
+          }
+        ]
+      }
+    }
+  ]
+}

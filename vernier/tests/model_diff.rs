@@ -46,9 +46,9 @@ fn err(e: VernierError) -> r::RefError {
         VernierError::EmptyPool => r::RefError::EmptyPool,
         VernierError::MalformedUtilisation => r::RefError::MalformedUtilisation,
         // The reference models single-swap quotes only; the basis offset and forward horizon bounds cannot arise here.
-        VernierError::Overflow | VernierError::CorrelationOutOfRange | VernierError::ForwardHorizon => {
-            r::RefError::Overflow
-        }
+        VernierError::Overflow
+        | VernierError::CorrelationOutOfRange
+        | VernierError::ForwardHorizon => r::RefError::Overflow,
     }
 }
 
@@ -87,7 +87,9 @@ fn compare(s: u16, e: u16, t: usize, l: Leg, n: u64, pool: &Pool, p: &Params) ->
         _ => false,
     };
     if !same {
-        return Some(format!("quote s={s} e={e} t={t} l={l:?} n={n} pool={pool:?} p={p:?}\n  got {got:?}\n  want {want:?}"));
+        return Some(format!(
+            "quote s={s} e={e} t={t} l={l:?} n={n} pool={pool:?} p={p:?}\n  got {got:?}\n  want {want:?}"
+        ));
     }
     let coll = i128::from(vernier::collateral(n, TENORS[t], p));
     if coll != r::collateral(i128::from(n), t, &c) {

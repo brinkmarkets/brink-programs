@@ -1,0 +1,2702 @@
+{
+  "address": "HhDTKdT36W1vE1DBgKnXDp7gFtxpxhRxovmfanuhaQiy",
+  "metadata": {
+    "name": "brink_vaults",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink fixed vaults: term series that place USDC at a venue and receive fixed on the Brink pool, so depositors hold a fixed APY to maturity"
+  },
+  "instructions": [
+    {
+      "name": "cancel",
+      "docs": [
+        "Anyone cancels a series that nobody hedged within the grace after its window closed. The authority may",
+        "cancel earlier while the series is still subscribing. Deposits return 1:1 through `withdraw`."
+      ],
+      "discriminator": [
+        232,
+        219,
+        223,
+        41,
+        219,
+        236,
+        220,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series.pool",
+                "account": "Series"
+              },
+              {
+                "kind": "account",
+                "path": "series.series_id",
+                "account": "Series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_series",
+      "docs": [
+        "Creates a series on a pool and its venue. Upgrade authority only."
+      ],
+      "discriminator": [
+        181,
+        9,
+        52,
+        120,
+        197,
+        221,
+        42,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "AmmPool"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "venue",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                160,
+                141,
+                30,
+                34,
+                12,
+                82,
+                129,
+                1,
+                127,
+                59,
+                69,
+                152,
+                50,
+                157,
+                224,
+                188,
+                216,
+                50,
+                2,
+                27,
+                55,
+                224,
+                3,
+                134,
+                13,
+                69,
+                231,
+                39,
+                220,
+                115,
+                65,
+                43
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "receipt_mint",
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "arg",
+                "path": "args.series_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  97,
+                  100,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  97,
+                  114,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "receipts_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  101,
+                  105,
+                  112,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateSeriesArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "deposit",
+      "docs": [
+        "Subscribes USDC while the window is open; one share per USDC."
+      ],
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series.pool",
+                "account": "Series"
+              },
+              {
+                "kind": "account",
+                "path": "series.series_id",
+                "account": "Series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "depositor",
+          "signer": true
+        },
+        {
+          "name": "depositor_usdc",
+          "writable": true
+        },
+        {
+          "name": "depositor_shares",
+          "writable": true
+        },
+        {
+          "name": "usdc_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "hedge",
+      "docs": [
+        "Once the window has closed, anyone places the hedge: a receive-fixed swap for the notional the deposits",
+        "support, the rest placed at the venue. A series below its minimum cancels instead. The fixed rate the",
+        "swap commits the series to is never below the series' own floor, whatever limit the caller supplies",
+        "(external scan 2, finding 15): the floor is set when the series is created and published with it."
+      ],
+      "discriminator": [
+        145,
+        158,
+        47,
+        42,
+        191,
+        80,
+        132,
+        46
+      ],
+      "accounts": [
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series.pool",
+                "account": "Series"
+              },
+              {
+                "kind": "account",
+                "path": "series.series_id",
+                "account": "Series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "amm_global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  119,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "account",
+                "path": "series.client_seed",
+                "account": "Series"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "pool_vault",
+          "writable": true
+        },
+        {
+          "name": "amm_event_authority"
+        },
+        {
+          "name": "swap_program",
+          "address": "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce"
+        },
+        {
+          "name": "venue",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "venue_reserve",
+          "writable": true
+        },
+        {
+          "name": "receipt_mint",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "venue_event_authority"
+        },
+        {
+          "name": "venue_program",
+          "address": "Boj38zJFfsN72DBL2nrJEfk1ewskn11EbdikgHMBX7v2"
+        },
+        {
+          "name": "usdc_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "receipts_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "limit_rate_bp",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "redeem",
+      "docs": [
+        "Redeems shares pro rata for the settled USDC."
+      ],
+      "discriminator": [
+        184,
+        12,
+        86,
+        149,
+        70,
+        196,
+        97,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series.pool",
+                "account": "Series"
+              },
+              {
+                "kind": "account",
+                "path": "series.series_id",
+                "account": "Series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "holder",
+          "signer": true
+        },
+        {
+          "name": "holder_usdc",
+          "writable": true
+        },
+        {
+          "name": "holder_shares",
+          "writable": true
+        },
+        {
+          "name": "usdc_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "settle",
+      "docs": [
+        "After maturity, anyone settles: the swap is settled if it is still open, the placement is redeemed, the",
+        "fee on the yield is split 50/50 to the treasury and the buyback escrow, and shares become redeemable."
+      ],
+      "discriminator": [
+        175,
+        42,
+        185,
+        87,
+        144,
+        131,
+        102,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series.pool",
+                "account": "Series"
+              },
+              {
+                "kind": "account",
+                "path": "series.series_id",
+                "account": "Series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "amm_global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "benchmark",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "swap",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "pool_vault",
+          "writable": true
+        },
+        {
+          "name": "amm_event_authority"
+        },
+        {
+          "name": "swap_program",
+          "address": "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce"
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "relations": [
+            "amm_global"
+          ]
+        },
+        {
+          "name": "buyback_escrow",
+          "writable": true,
+          "relations": [
+            "amm_global"
+          ]
+        },
+        {
+          "name": "venue",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "venue_reserve",
+          "writable": true
+        },
+        {
+          "name": "receipt_mint",
+          "writable": true,
+          "relations": [
+            "venue"
+          ]
+        },
+        {
+          "name": "venue_event_authority"
+        },
+        {
+          "name": "venue_program",
+          "address": "Boj38zJFfsN72DBL2nrJEfk1ewskn11EbdikgHMBX7v2"
+        },
+        {
+          "name": "usdc_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "receipts_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "Returns USDC 1:1 for shares while the series is subscribing or after it was cancelled."
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "series",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  114,
+                  105,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "series.pool",
+                "account": "Series"
+              },
+              {
+                "kind": "account",
+                "path": "series.series_id",
+                "account": "Series"
+              }
+            ]
+          }
+        },
+        {
+          "name": "trader",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "holder",
+          "signer": true
+        },
+        {
+          "name": "holder_usdc",
+          "writable": true
+        },
+        {
+          "name": "holder_shares",
+          "writable": true
+        },
+        {
+          "name": "usdc_account",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "series"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Series",
+      "discriminator": [
+        240,
+        97,
+        8,
+        183,
+        139,
+        77,
+        250,
+        162
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Hedged",
+      "discriminator": [
+        143,
+        2,
+        224,
+        45,
+        8,
+        137,
+        128,
+        249
+      ]
+    },
+    {
+      "name": "Redeemed",
+      "discriminator": [
+        14,
+        29,
+        183,
+        71,
+        31,
+        165,
+        107,
+        38
+      ]
+    },
+    {
+      "name": "SeriesCancelled",
+      "discriminator": [
+        122,
+        248,
+        101,
+        161,
+        50,
+        56,
+        189,
+        94
+      ]
+    },
+    {
+      "name": "SeriesCreated",
+      "discriminator": [
+        2,
+        164,
+        54,
+        38,
+        24,
+        181,
+        233,
+        180
+      ]
+    },
+    {
+      "name": "SeriesSettled",
+      "discriminator": [
+        119,
+        185,
+        208,
+        158,
+        40,
+        59,
+        197,
+        235
+      ]
+    },
+    {
+      "name": "Subscribed",
+      "discriminator": [
+        135,
+        59,
+        105,
+        76,
+        190,
+        236,
+        138,
+        228
+      ]
+    },
+    {
+      "name": "Withdrawn",
+      "discriminator": [
+        20,
+        89,
+        223,
+        198,
+        194,
+        124,
+        219,
+        13
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotUpgradeAuthority",
+      "msg": "Only the program's upgrade authority may create a series"
+    },
+    {
+      "code": 6001,
+      "name": "Window",
+      "msg": "The subscription window must be between one hour and seven days"
+    },
+    {
+      "code": 6002,
+      "name": "Fee",
+      "msg": "The fee on yield may not exceed 20 percent"
+    },
+    {
+      "code": 6003,
+      "name": "Tenor",
+      "msg": "Invalid tenor index"
+    },
+    {
+      "code": 6004,
+      "name": "Caps",
+      "msg": "The cap and minimum must be positive, the minimum within the cap, and the cap within the pool's maximum notional"
+    },
+    {
+      "code": 6005,
+      "name": "VenueBenchmark",
+      "msg": "The venue is not on the pool's benchmark"
+    },
+    {
+      "code": 6006,
+      "name": "Zero",
+      "msg": "Amount must be positive"
+    },
+    {
+      "code": 6007,
+      "name": "Status",
+      "msg": "The series is not in the state this action needs"
+    },
+    {
+      "code": 6008,
+      "name": "WindowClosed",
+      "msg": "The subscription window has closed"
+    },
+    {
+      "code": 6009,
+      "name": "WindowOpen",
+      "msg": "The subscription window is still open"
+    },
+    {
+      "code": 6010,
+      "name": "Cap",
+      "msg": "The deposit would exceed the series cap"
+    },
+    {
+      "code": 6011,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6012,
+      "name": "SwapRead",
+      "msg": "Could not read the swap the AMM wrote"
+    },
+    {
+      "code": 6013,
+      "name": "NotYet",
+      "msg": "Only the authority may cancel before the hedge grace has passed"
+    },
+    {
+      "code": 6014,
+      "name": "NotMatured",
+      "msg": "The series has not matured"
+    },
+    {
+      "code": 6015,
+      "name": "TokenOwner",
+      "msg": "Token account owner mismatch"
+    },
+    {
+      "code": 6016,
+      "name": "Mint",
+      "msg": "Token mint mismatch"
+    },
+    {
+      "code": 6017,
+      "name": "Venue",
+      "msg": "Venue accounts do not match the venue"
+    },
+    {
+      "code": 6018,
+      "name": "FeeDestination",
+      "msg": "Fee destinations must be the AMM's treasury and buyback escrow"
+    },
+    {
+      "code": 6019,
+      "name": "HedgeRateFloor",
+      "msg": "The hedge would commit the series to a fixed rate below its floor"
+    }
+  ],
+  "types": [
+    {
+      "name": "Benchmark",
+      "docs": [
+        "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
+        "`version`; both programs upgrade together when it changes.",
+        "",
+        "Space is declared by hand (`impl Space`) because the fixings ring is held in a `Box`: the account is about",
+        "2.7 KB and a by-value deserialisation of it needs two copies in one SBF stack frame, above the 4 KB frame",
+        "limit (the toolchain reports the overflow at build time). With the ring on the heap the struct is about 700",
+        "bytes on the stack and the ring is copied once, in its own frame. The wire layout is unchanged: a boxed array",
+        "serialises as the array."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "ema_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "unix_ts",
+            "type": "i64"
+          },
+          {
+            "name": "accrual_e18",
+            "type": "u128"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "band_bp",
+            "type": "u16"
+          },
+          {
+            "name": "half_life_slots",
+            "type": "u64"
+          },
+          {
+            "name": "min_interval_slots",
+            "type": "u64"
+          },
+          {
+            "name": "published",
+            "type": "bool"
+          },
+          {
+            "name": "publish_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "prev_value_bp",
+            "docs": [
+              "Value held over the most recent accrual segment `[prev_unix_ts, unix_ts]` (maths finding M-2)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "prev_unix_ts",
+            "docs": [
+              "Start of the most recent accrual segment; equals `unix_ts` until the second accepted value."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "max_drift_bp",
+            "docs": [
+              "Drift bound (S-6): the value may move at most this far from `drift_anchor_bp` within one window."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "drift_window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "drift_anchor_bp",
+            "type": "u16"
+          },
+          {
+            "name": "drift_anchor_slot",
+            "type": "u64"
+          },
+          {
+            "name": "clamped",
+            "docs": [
+              "The last accepted value was clamped by the band or the drift bound."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "disputed",
+            "docs": [
+              "The last aggregation had a quorum of fresh observations that did not agree; the value was not moved."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "support",
+            "docs": [
+              "Observations that supported the last accepted value. `1` means a single-publisher (devnet) registry."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "observations",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Observation"
+                  }
+                },
+                5
+              ]
+            }
+          },
+          {
+            "name": "ema_milli_bp",
+            "docs": [
+              "EMA at bp x 1 000 (maths finding M-6). `ema_bp` is `rhu(ema_milli_bp / 1 000)`; at most",
+              "`MAX_RATE_BP x 1 000`, so it fits `u32` and the `u16` narrowing of `ema_bp` cannot fail."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_first_day",
+            "docs": [
+              "UTC day number (unix seconds / 86 400) of the oldest fixing ever written; 0 until the first midnight the",
+              "benchmark lives through."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixing_head_day",
+            "docs": [
+              "UTC day number of the most recent fixing written."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fixings",
+            "docs": [
+              "Ring of `FIXING_DAYS` daily fixings: the cumulative accrual (`accrual_e18` units) at 00:00 UTC of day `d`",
+              "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
+              "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
+              "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode; boxed so that copy is made",
+              "once, outside the account's own stack frame."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                2048
+              ]
+            }
+          },
+          {
+            "name": "ema_slot",
+            "docs": [
+              "Slot at which the EMA last moved (or was confirmed equal to its input); the decay of the next step is",
+              "measured from here, not from the last publication (M-11)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accepted_slot",
+            "docs": [
+              "Slot of the transaction that last accepted a value. `slot` is the freshness of the data behind it (M-12);",
+              "this is when the benchmark itself last moved, used to widen the band after an outage."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "support_lost",
+            "docs": [
+              "The observations behind the last accepted value no longer amount to a quorum of currently registered,",
+              "fresh publishers: set by `remove_publisher` and `set_publishers` for the benchmarks passed to them, by",
+              "`revalidate`, and by `publish` when fewer registered observations than the quorum are fresh. Degrades the",
+              "benchmark until the next accepted value clears it (external scan 2, finding 8)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                11
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookSide",
+      "docs": [
+        "One side of the open book: the four signed aggregates for one leg."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "notional",
+            "type": "i128"
+          },
+          {
+            "name": "accrual_start",
+            "type": "i128"
+          },
+          {
+            "name": "maturity_weight",
+            "type": "i128"
+          },
+          {
+            "name": "fixed_leg",
+            "type": "i128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CancelReason",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "BelowMinimum"
+          },
+          {
+            "name": "Unhedged"
+          },
+          {
+            "name": "Authority"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreateSeriesArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series_id",
+            "type": "u16"
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "subscribe_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "min_total",
+            "type": "u64"
+          },
+          {
+            "name": "fee_bp",
+            "type": "u16"
+          },
+          {
+            "name": "client_seed",
+            "type": "u64"
+          },
+          {
+            "name": "min_fixed_bp",
+            "docs": [
+              "The lowest fixed rate the hedge may commit the series to, in basis points."
+            ],
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Global",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "buyback_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "OperatingMode"
+              }
+            }
+          },
+          {
+            "name": "param_delay_slots",
+            "type": "u64"
+          },
+          {
+            "name": "limited_mode_cap",
+            "type": "u64"
+          },
+          {
+            "name": "pool_count",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Hedged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "swap",
+            "type": "pubkey"
+          },
+          {
+            "name": "fixed_bp",
+            "type": "u16"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "placed",
+            "type": "u64"
+          },
+          {
+            "name": "receipts",
+            "type": "u64"
+          },
+          {
+            "name": "matures_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HookFlags",
+      "docs": [
+        "Hook points. Hooks observe and veto entries only (open, deposit); no exit (withdraw, cancel, settle,",
+        "liquidate) makes a hook CPI in any mode, so no hook can ever veto or starve an exit (review F-30, ADR-003).",
+        "The four retired exit points keep their slots so the layout and the point discriminators are stable; they must",
+        "be false and never fire. Hook CPIs are made in `Normal` mode only."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "before_open",
+            "docs": [
+              "Veto point: a non-zero return refuses the open."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "after_open",
+            "docs": [
+              "Notification after the open is booked; the pool account bytes carry the post-open state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_2",
+            "docs": [
+              "Retired (was `before_cancel`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_3",
+            "docs": [
+              "Retired (was `after_cancel`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "before_deposit",
+            "docs": [
+              "Veto point: a non-zero return refuses the deposit."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "after_deposit",
+            "docs": [
+              "Notification after the deposit is booked; the pool account bytes carry the post-deposit state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_6",
+            "docs": [
+              "Retired (was `before_withdraw`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_7",
+            "docs": [
+              "Retired (was `after_settle`). Must be false."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Observation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "value_bp",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperatingMode",
+      "docs": [
+        "Kill switch and graceful degradation, designed in from day one."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Normal"
+          },
+          {
+            "name": "Limited"
+          },
+          {
+            "name": "WithdrawOnly"
+          },
+          {
+            "name": "Halted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "share_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "hook_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "hooks",
+            "type": {
+              "defined": {
+                "name": "HookFlags"
+              }
+            }
+          },
+          {
+            "name": "pricer",
+            "type": {
+              "defined": {
+                "name": "Pricer"
+              }
+            }
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "pending_params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "pending_effective_slot",
+            "type": "u64"
+          },
+          {
+            "name": "tvl",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_held",
+            "type": "u64"
+          },
+          {
+            "name": "util_pay_bp",
+            "type": "u16"
+          },
+          {
+            "name": "util_rec_bp",
+            "type": "u16"
+          },
+          {
+            "name": "open_pay_notional",
+            "type": "u64"
+          },
+          {
+            "name": "open_rec_notional",
+            "type": "u64"
+          },
+          {
+            "name": "open_swaps",
+            "type": "u32"
+          },
+          {
+            "name": "fees_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "event_seq",
+            "type": "u64"
+          },
+          {
+            "name": "min_notional",
+            "type": "u64"
+          },
+          {
+            "name": "max_notional",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "book_pay",
+            "docs": [
+              "Open book aggregates (ADR-008, ADR-017 section 2), kept per leg since external scan 1 (M-4): the pay-fixed",
+              "side and the receive-fixed side are clamped to their own collateral separately, so an unbounded gain on",
+              "one side can never be netted against an uncollectible loss on the other. Each side is signed with +1 for",
+              "pay-fixed and -1 for receive-fixed swaps and maintained exactly by `open` (add) and `close` (subtract), so",
+              "the unrealised value of the book is an O(1) function of the benchmark accrual, the published value and",
+              "the clock; see `Pool::book_value`. Units: notional in USDC base units, times basis-point-seconds or seconds."
+            ],
+            "type": {
+              "defined": {
+                "name": "BookSide"
+              }
+            }
+          },
+          {
+            "name": "book_rec",
+            "type": {
+              "defined": {
+                "name": "BookSide"
+              }
+            }
+          },
+          {
+            "name": "collateral_pay",
+            "docs": [
+              "Trader collateral held per side; `collateral_held` is their sum."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "collateral_rec",
+            "type": "u64"
+          },
+          {
+            "name": "limited_window_start",
+            "docs": [
+              "Limited-mode budget window (simulation S-2): new notional opened in this pool since `limited_window_start`",
+              "may not exceed `Global::limited_mode_cap` within `LIMITED_WINDOW_SECS`, in addition to the per-swap cap."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "limited_window_notional",
+            "type": "u64"
+          },
+          {
+            "name": "fees_buyback_accrued",
+            "docs": [
+              "Unswept platform fees held in this pool's vault, buyback half (review F-29, ADR-001, ADR-013). Fees",
+              "accrue per pool so the hot path never writes the singleton `Global` or a shared fee account."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fees_treasury_accrued",
+            "docs": [
+              "Unswept platform fees held in this pool's vault, treasury half."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "withdraw_reserved",
+            "docs": [
+              "USDC set aside in the vault for processed, unclaimed queued withdrawals (ADR-009). Not LP capital."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "ladder",
+            "docs": [
+              "Maturity ladder (external scan 1, M-5): open swaps counted by maturity day. Maturities fall on UTC",
+              "midnights, so a day bucket is exact: once a bucket's midnight has passed and its count is not zero, a",
+              "matured swap is awaiting settlement and LP pricing is suspended until it is settled (anyone may settle it",
+              "and is paid a bounty for doing so). Bucket `day % MATURITY_BUCKETS` holds six little-endian bytes: the",
+              "`u32` day it counts and a `u16` count, so a stale bucket is detected rather than aliased. Raw bytes rather",
+              "than typed arrays so that loading the account is a copy, not a per-element decode (stack frame bound)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                1536
+              ]
+            }
+          },
+          {
+            "name": "share_supply",
+            "docs": [
+              "Mirror of the share mint supply, so that paths without the mint account (`trader_open_swap`) can value",
+              "queued shares (M-18). Asserted equal to the mint wherever the mint is present."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queued_shares",
+            "docs": [
+              "Mirror of the withdrawal queue's open epoch (M-18): shares queued and the slot of the epoch's first",
+              "request, zero when none. A new swap may not consume the capacity an eligible epoch is waiting for."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queue_first_slot",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_placed",
+            "docs": [
+              "USDC principal placed at the pool's reserve venue (the Stacked Treasuries reserve, `PoolReserve`). It is",
+              "LP capital that is not in the vault, so conservation counts it: `vault + reserve_placed >= accounted`.",
+              "Zero for a pool without a reserve."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserve_active",
+            "docs": [
+              "1 once `admin_enable_reserve` has created the pool's `PoolReserve`; payouts then report a short working",
+              "balance by name instead of failing inside the token program."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                15
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pricer",
+      "docs": [
+        "Which pricing curve quotes this pool. `External` is reserved for v1.1 (pricer CPI); creating such a pool",
+        "is permitted so governance can stage it, but quotes fail with `PricerMismatch` until the CPI path ships."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Vernier"
+          },
+          {
+            "name": "External",
+            "fields": [
+              {
+                "name": "program",
+                "type": "pubkey"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Redeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Series",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "share_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "docs": [
+              "System-owned PDA that is the trader on the swap and the owner on the venue."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipts_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "series_id",
+            "type": "u16"
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "SeriesStatus"
+              }
+            }
+          },
+          {
+            "name": "created_ts",
+            "type": "i64"
+          },
+          {
+            "name": "subscribe_until_ts",
+            "type": "i64"
+          },
+          {
+            "name": "hedged_ts",
+            "type": "i64"
+          },
+          {
+            "name": "matures_ts",
+            "type": "i64"
+          },
+          {
+            "name": "deposits",
+            "docs": [
+              "USDC subscribed and still in the series (before the hedge) or hedged (after it)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "min_total",
+            "type": "u64"
+          },
+          {
+            "name": "fee_bp",
+            "type": "u16"
+          },
+          {
+            "name": "fixed_bp",
+            "type": "u16"
+          },
+          {
+            "name": "notional",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "placed",
+            "type": "u64"
+          },
+          {
+            "name": "receipts",
+            "type": "u64"
+          },
+          {
+            "name": "swap",
+            "type": "pubkey"
+          },
+          {
+            "name": "client_seed",
+            "type": "u64"
+          },
+          {
+            "name": "settled_assets",
+            "type": "u64"
+          },
+          {
+            "name": "fee_paid",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "trader_bump",
+            "type": "u8"
+          },
+          {
+            "name": "min_fixed_bp",
+            "docs": [
+              "The lowest fixed rate the hedge may commit the series to, in basis points. Set at creation."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                62
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeriesCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "deposits",
+            "type": "u64"
+          },
+          {
+            "name": "reason",
+            "type": {
+              "defined": {
+                "name": "CancelReason"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeriesCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "series_id",
+            "type": "u16"
+          },
+          {
+            "name": "tenor",
+            "type": "u8"
+          },
+          {
+            "name": "subscribe_until_ts",
+            "type": "i64"
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "min_total",
+            "type": "u64"
+          },
+          {
+            "name": "fee_bp",
+            "type": "u16"
+          },
+          {
+            "name": "min_fixed_bp",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeriesSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "total",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "settled_assets",
+            "type": "u64"
+          },
+          {
+            "name": "deposits",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeriesStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Subscribing"
+          },
+          {
+            "name": "Hedged"
+          },
+          {
+            "name": "Settled"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Subscribed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "depositor",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "deposits",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Venue",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "index_e18",
+            "docs": [
+              "USDC per receipt base unit, scaled by 1e18."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "bench_accrual_e18",
+            "docs": [
+              "The benchmark's cumulative accrual at the last touch."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "tail_bps",
+            "docs": [
+              "Accrual counted at the last touch beyond the benchmark's last publication, in bp seconds."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "last_ts",
+            "type": "i64"
+          },
+          {
+            "name": "principal",
+            "docs": [
+              "USDC placed and not yet redeemed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "receipts",
+            "docs": [
+              "Receipt supply mirror."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "funded",
+            "docs": [
+              "USDC added to the reserve by `fund`, cumulative."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "anchor_index_e18",
+            "docs": [
+              "The index at 00:00 UTC of `anchor_day`, exact: the compounding anchor every reading is reconstructed from."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "anchor_day",
+            "docs": [
+              "UTC day number of the anchor midnight; zero on a version 1 account until its first accrual under this",
+              "build, which places the anchor from the stored index."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "anchor_accrual",
+            "docs": [
+              "The benchmark's cumulative accrual at the anchor midnight, in `accrual_e18` units."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                28
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "VernierParamsOnChain",
+      "docs": [
+        "Vernier parameters as stored on chain (mirror of `vernier::Params`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "model_pay_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "model_rec_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "term_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "demand_k_bp",
+            "type": "u16"
+          },
+          {
+            "name": "demand_cap_bp",
+            "type": "u16"
+          },
+          {
+            "name": "collateral_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "series",
+            "type": "pubkey"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

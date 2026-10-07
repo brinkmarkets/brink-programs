@@ -197,6 +197,16 @@ pub fn queue_calibration(
     p: VernierParamsOnChain,
 ) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
+    let slot = Clock::get()?.slot;
+    // A calibration whose delay has run is installed before anything is validated against `params`, and one
+    // still pending is never silently replaced: the step bound must hold against the calibration that will
+    // actually be live, and a scheduled tightening cannot be dropped by queueing again (external scan 2,
+    // finding 24). `admin_cancel_calibration` withdraws a pending one explicitly.
+    super::swap::apply_pending(pool, slot);
+    require!(
+        pool.pending_effective_slot == 0,
+        BrinkError::CalibrationPending
+    );
     let cur = pool.params;
     let tables = [
         (cur.model_pay_bp, p.model_pay_bp),
@@ -216,8 +226,7 @@ pub fn queue_calibration(
         BrinkError::CalibrationStep
     );
     check_calibration_bounds(&p)?;
-    let effective = Clock::get()?
-        .slot
+    let effective = slot
         .checked_add(ctx.accounts.global.param_delay_slots)
         .ok_or(BrinkError::Overflow)?;
     pool.pending_params = p;
@@ -226,6 +235,22 @@ pub fn queue_calibration(
         pool: pool.key(),
         effective_slot: effective
     });
+    Ok(())
+}
+
+/// Withdraws a queued calibration that has not yet taken effect. One whose delay has already run is installed
+/// instead, so a cancel can never remove a calibration that is due (external scan 2, finding 24).
+pub fn cancel_calibration(ctx: Context<AdminQueueCalibration>) -> Result<()> {
+    let pool = &mut ctx.accounts.pool;
+    let slot = Clock::get()?.slot;
+    super::swap::apply_pending(pool, slot);
+    require!(
+        pool.pending_effective_slot != 0,
+        BrinkError::NoCalibrationPending
+    );
+    pool.pending_params = pool.params;
+    pool.pending_effective_slot = 0;
+    emit_cpi!(CalibrationCancelled { pool: pool.key() });
     Ok(())
 }
 

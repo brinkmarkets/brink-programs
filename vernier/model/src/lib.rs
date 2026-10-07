@@ -225,7 +225,10 @@ pub mod bridge {
         match e {
             VernierError::EmptyPool => r::RefError::EmptyPool,
             VernierError::MalformedUtilisation => r::RefError::MalformedUtilisation,
-            VernierError::Overflow | VernierError::CorrelationOutOfRange => r::RefError::Overflow,
+            // The forward-horizon refusal is outside the spot model's domain; the bridge never generates it.
+            VernierError::Overflow
+            | VernierError::CorrelationOutOfRange
+            | VernierError::ForwardHorizon => r::RefError::Overflow,
         }
     }
 

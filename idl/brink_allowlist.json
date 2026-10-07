@@ -1,0 +1,1634 @@
+{
+  "address": "FaNttHSrjcQruS8qBNFDdmAnKq9Z4ZGu2y1UkMYXe1UR",
+  "metadata": {
+    "name": "brink_allowlist",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Brink permissioned pools: an allow-list hook for the swap AMM that vetoes opens and deposits from wallets not on a pool's list"
+  },
+  "instructions": [
+    {
+      "name": "accept_manager",
+      "docs": [
+        "The proposed manager accepts."
+      ],
+      "discriminator": [
+        212,
+        23,
+        254,
+        58,
+        51,
+        238,
+        232,
+        67
+      ],
+      "accounts": [
+        {
+          "name": "list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_manager",
+          "signer": true,
+          "relations": [
+            "list"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "add_entry",
+      "docs": [
+        "Adds a wallet to the list with its permissions and an optional expiry (`0` for none)."
+      ],
+      "discriminator": [
+        170,
+        45,
+        66,
+        212,
+        251,
+        230,
+        45,
+        38
+      ],
+      "accounts": [
+        {
+          "name": "list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              }
+            ]
+          }
+        },
+        {
+          "name": "manager",
+          "signer": true,
+          "relations": [
+            "list"
+          ]
+        },
+        {
+          "name": "wallet"
+        },
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "EntryTerms"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_list",
+      "docs": [
+        "Creates the list for a pool whose hook is this program. Only the AMM's protocol authority may do so, and",
+        "it names the manager who runs the list."
+      ],
+      "discriminator": [
+        146,
+        145,
+        77,
+        186,
+        66,
+        169,
+        62,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "amm_global",
+          "docs": [
+            "The AMM's global account; its `authority` is the only key that may create a list."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "amm_global"
+          ]
+        },
+        {
+          "name": "pool",
+          "docs": [
+            "The pool whose hook is this program."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "AmmPool"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                201,
+                235,
+                98,
+                87,
+                123,
+                239,
+                100,
+                161,
+                227,
+                110,
+                86,
+                33,
+                232,
+                141,
+                50,
+                150,
+                185,
+                61,
+                104,
+                31,
+                118,
+                80,
+                1,
+                119,
+                207,
+                134,
+                168,
+                46,
+                198,
+                85,
+                60,
+                71
+              ]
+            }
+          }
+        },
+        {
+          "name": "list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateListArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "remove_entry",
+      "docs": [
+        "Removes a wallet: closes its entry and returns the rent to the manager. Open positions are unaffected;",
+        "exits never consult the hook."
+      ],
+      "discriminator": [
+        135,
+        175,
+        236,
+        10,
+        213,
+        208,
+        69,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              }
+            ]
+          },
+          "relations": [
+            "entry"
+          ]
+        },
+        {
+          "name": "manager",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "list"
+          ]
+        },
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              },
+              {
+                "kind": "account",
+                "path": "entry.wallet",
+                "account": "Entry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_gates",
+      "docs": [
+        "Sets which points are gated and whether the list is frozen. A gate that is off admits everyone at that",
+        "point; a frozen list admits no one at any gated point."
+      ],
+      "discriminator": [
+        69,
+        3,
+        195,
+        175,
+        66,
+        197,
+        136,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              }
+            ]
+          }
+        },
+        {
+          "name": "manager",
+          "signer": true,
+          "relations": [
+            "list"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "gate_open",
+          "type": "bool"
+        },
+        {
+          "name": "gate_deposit",
+          "type": "bool"
+        },
+        {
+          "name": "frozen",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_manager",
+      "docs": [
+        "Proposes a new manager. The zero key clears a pending proposal."
+      ],
+      "discriminator": [
+        30,
+        197,
+        171,
+        92,
+        121,
+        184,
+        151,
+        165
+      ],
+      "accounts": [
+        {
+          "name": "list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              }
+            ]
+          }
+        },
+        {
+          "name": "manager",
+          "signer": true,
+          "relations": [
+            "list"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_manager",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_entry",
+      "docs": [
+        "Changes a wallet's permissions or expiry."
+      ],
+      "discriminator": [
+        70,
+        47,
+        181,
+        2,
+        1,
+        40,
+        2,
+        92
+      ],
+      "accounts": [
+        {
+          "name": "list",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              }
+            ]
+          },
+          "relations": [
+            "entry"
+          ]
+        },
+        {
+          "name": "manager",
+          "signer": true,
+          "relations": [
+            "list"
+          ]
+        },
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "list.pool",
+                "account": "List"
+              },
+              {
+                "kind": "account",
+                "path": "entry.wallet",
+                "account": "Entry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "EntryTerms"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Entry",
+      "discriminator": [
+        63,
+        18,
+        152,
+        113,
+        215,
+        246,
+        221,
+        250
+      ]
+    },
+    {
+      "name": "List",
+      "discriminator": [
+        169,
+        24,
+        186,
+        110,
+        22,
+        139,
+        190,
+        82
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "EntryChanged",
+      "discriminator": [
+        228,
+        20,
+        252,
+        83,
+        45,
+        22,
+        163,
+        142
+      ]
+    },
+    {
+      "name": "GatesChanged",
+      "discriminator": [
+        239,
+        237,
+        185,
+        116,
+        58,
+        212,
+        108,
+        16
+      ]
+    },
+    {
+      "name": "ListCreated",
+      "discriminator": [
+        5,
+        180,
+        112,
+        221,
+        45,
+        240,
+        132,
+        102
+      ]
+    },
+    {
+      "name": "ManagerChanged",
+      "discriminator": [
+        142,
+        97,
+        175,
+        220,
+        73,
+        27,
+        252,
+        56
+      ]
+    },
+    {
+      "name": "ManagerProposed",
+      "discriminator": [
+        133,
+        245,
+        234,
+        17,
+        83,
+        176,
+        252,
+        247
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotAuthority",
+      "msg": "Only the AMM's authority may create a list"
+    },
+    {
+      "code": 6001,
+      "name": "NotManager",
+      "msg": "Only the list's manager may do this"
+    },
+    {
+      "code": 6002,
+      "name": "PoolNotHooked",
+      "msg": "The pool's hook is not this program"
+    },
+    {
+      "code": 6003,
+      "name": "ZeroKey",
+      "msg": "The zero key is not a valid manager"
+    },
+    {
+      "code": 6004,
+      "name": "NoPermission",
+      "msg": "An entry needs at least one permission"
+    },
+    {
+      "code": 6005,
+      "name": "ExpiryInPast",
+      "msg": "The expiry is in the past"
+    },
+    {
+      "code": 6006,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6007,
+      "name": "SameManager",
+      "msg": "The proposed manager is the current manager"
+    },
+    {
+      "code": 6008,
+      "name": "NotPending",
+      "msg": "The signer is not the pending manager"
+    },
+    {
+      "code": 6009,
+      "name": "BadCall",
+      "msg": "Malformed hook call"
+    },
+    {
+      "code": 6010,
+      "name": "PoolMismatch",
+      "msg": "The pool account does not match the hook payload"
+    },
+    {
+      "code": 6011,
+      "name": "ListMissing",
+      "msg": "The pool's list account was not passed or does not exist"
+    },
+    {
+      "code": 6012,
+      "name": "Frozen",
+      "msg": "The list is frozen; no entries are admitted"
+    },
+    {
+      "code": 6013,
+      "name": "NotAllowed",
+      "msg": "This wallet is not on the pool's allow-list for this action"
+    },
+    {
+      "code": 6014,
+      "name": "Expired",
+      "msg": "This wallet's entry has expired"
+    }
+  ],
+  "types": [
+    {
+      "name": "BookSide",
+      "docs": [
+        "One side of the open book: the four signed aggregates for one leg."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "notional",
+            "type": "i128"
+          },
+          {
+            "name": "accrual_start",
+            "type": "i128"
+          },
+          {
+            "name": "maturity_weight",
+            "type": "i128"
+          },
+          {
+            "name": "fixed_leg",
+            "type": "i128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreateListArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "manager",
+            "type": "pubkey"
+          },
+          {
+            "name": "gate_open",
+            "type": "bool"
+          },
+          {
+            "name": "gate_deposit",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Entry",
+      "docs": [
+        "One entry per wallet per pool."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "list",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "may_open",
+            "type": "bool"
+          },
+          {
+            "name": "may_deposit",
+            "type": "bool"
+          },
+          {
+            "name": "expires_ts",
+            "docs": [
+              "Unix time after which the entry no longer admits; `0` for no expiry."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "added_ts",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "EntryChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "list",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "may_open",
+            "type": "bool"
+          },
+          {
+            "name": "may_deposit",
+            "type": "bool"
+          },
+          {
+            "name": "expires_ts",
+            "type": "i64"
+          },
+          {
+            "name": "removed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EntryTerms",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "may_open",
+            "type": "bool"
+          },
+          {
+            "name": "may_deposit",
+            "type": "bool"
+          },
+          {
+            "name": "expires_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GatesChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "list",
+            "type": "pubkey"
+          },
+          {
+            "name": "gate_open",
+            "type": "bool"
+          },
+          {
+            "name": "gate_deposit",
+            "type": "bool"
+          },
+          {
+            "name": "frozen",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Global",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "buyback_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "OperatingMode"
+              }
+            }
+          },
+          {
+            "name": "param_delay_slots",
+            "type": "u64"
+          },
+          {
+            "name": "limited_mode_cap",
+            "type": "u64"
+          },
+          {
+            "name": "pool_count",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "HookFlags",
+      "docs": [
+        "Hook points. Hooks observe and veto entries only (open, deposit); no exit (withdraw, cancel, settle,",
+        "liquidate) makes a hook CPI in any mode, so no hook can ever veto or starve an exit (review F-30, ADR-003).",
+        "The four retired exit points keep their slots so the layout and the point discriminators are stable; they must",
+        "be false and never fire. Hook CPIs are made in `Normal` mode only."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "before_open",
+            "docs": [
+              "Veto point: a non-zero return refuses the open."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "after_open",
+            "docs": [
+              "Notification after the open is booked; the pool account bytes carry the post-open state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_2",
+            "docs": [
+              "Retired (was `before_cancel`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_3",
+            "docs": [
+              "Retired (was `after_cancel`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "before_deposit",
+            "docs": [
+              "Veto point: a non-zero return refuses the deposit."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "after_deposit",
+            "docs": [
+              "Notification after the deposit is booked; the pool account bytes carry the post-deposit state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_6",
+            "docs": [
+              "Retired (was `before_withdraw`). Must be false."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved_7",
+            "docs": [
+              "Retired (was `after_settle`). Must be false."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "List",
+      "docs": [
+        "One list per permissioned pool."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "manager",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_manager",
+            "type": "pubkey"
+          },
+          {
+            "name": "gate_open",
+            "type": "bool"
+          },
+          {
+            "name": "gate_deposit",
+            "type": "bool"
+          },
+          {
+            "name": "frozen",
+            "type": "bool"
+          },
+          {
+            "name": "entries",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "list",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "manager",
+            "type": "pubkey"
+          },
+          {
+            "name": "gate_open",
+            "type": "bool"
+          },
+          {
+            "name": "gate_deposit",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManagerChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "list",
+            "type": "pubkey"
+          },
+          {
+            "name": "previous",
+            "type": "pubkey"
+          },
+          {
+            "name": "manager",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManagerProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "list",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_manager",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperatingMode",
+      "docs": [
+        "Kill switch and graceful degradation, designed in from day one."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Normal"
+          },
+          {
+            "name": "Limited"
+          },
+          {
+            "name": "WithdrawOnly"
+          },
+          {
+            "name": "Halted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "share_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "hook_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "hooks",
+            "type": {
+              "defined": {
+                "name": "HookFlags"
+              }
+            }
+          },
+          {
+            "name": "pricer",
+            "type": {
+              "defined": {
+                "name": "Pricer"
+              }
+            }
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "pending_params",
+            "type": {
+              "defined": {
+                "name": "VernierParamsOnChain"
+              }
+            }
+          },
+          {
+            "name": "pending_effective_slot",
+            "type": "u64"
+          },
+          {
+            "name": "tvl",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_held",
+            "type": "u64"
+          },
+          {
+            "name": "util_pay_bp",
+            "type": "u16"
+          },
+          {
+            "name": "util_rec_bp",
+            "type": "u16"
+          },
+          {
+            "name": "open_pay_notional",
+            "type": "u64"
+          },
+          {
+            "name": "open_rec_notional",
+            "type": "u64"
+          },
+          {
+            "name": "open_swaps",
+            "type": "u32"
+          },
+          {
+            "name": "fees_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "event_seq",
+            "type": "u64"
+          },
+          {
+            "name": "min_notional",
+            "type": "u64"
+          },
+          {
+            "name": "max_notional",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "book_pay",
+            "docs": [
+              "Open book aggregates (ADR-008, ADR-017 section 2), kept per leg since external scan 1 (M-4): the pay-fixed",
+              "side and the receive-fixed side are clamped to their own collateral separately, so an unbounded gain on",
+              "one side can never be netted against an uncollectible loss on the other. Each side is signed with +1 for",
+              "pay-fixed and -1 for receive-fixed swaps and maintained exactly by `open` (add) and `close` (subtract), so",
+              "the unrealised value of the book is an O(1) function of the benchmark accrual, the published value and",
+              "the clock; see `Pool::book_value`. Units: notional in USDC base units, times basis-point-seconds or seconds."
+            ],
+            "type": {
+              "defined": {
+                "name": "BookSide"
+              }
+            }
+          },
+          {
+            "name": "book_rec",
+            "type": {
+              "defined": {
+                "name": "BookSide"
+              }
+            }
+          },
+          {
+            "name": "collateral_pay",
+            "docs": [
+              "Trader collateral held per side; `collateral_held` is their sum."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "collateral_rec",
+            "type": "u64"
+          },
+          {
+            "name": "limited_window_start",
+            "docs": [
+              "Limited-mode budget window (simulation S-2): new notional opened in this pool since `limited_window_start`",
+              "may not exceed `Global::limited_mode_cap` within `LIMITED_WINDOW_SECS`, in addition to the per-swap cap."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "limited_window_notional",
+            "type": "u64"
+          },
+          {
+            "name": "fees_buyback_accrued",
+            "docs": [
+              "Unswept platform fees held in this pool's vault, buyback half (review F-29, ADR-001, ADR-013). Fees",
+              "accrue per pool so the hot path never writes the singleton `Global` or a shared fee account."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fees_treasury_accrued",
+            "docs": [
+              "Unswept platform fees held in this pool's vault, treasury half."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "withdraw_reserved",
+            "docs": [
+              "USDC set aside in the vault for processed, unclaimed queued withdrawals (ADR-009). Not LP capital."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "ladder",
+            "docs": [
+              "Maturity ladder (external scan 1, M-5): open swaps counted by maturity day. Maturities fall on UTC",
+              "midnights, so a day bucket is exact: once a bucket's midnight has passed and its count is not zero, a",
+              "matured swap is awaiting settlement and LP pricing is suspended until it is settled (anyone may settle it",
+              "and is paid a bounty for doing so). Bucket `day % MATURITY_BUCKETS` holds six little-endian bytes: the",
+              "`u32` day it counts and a `u16` count, so a stale bucket is detected rather than aliased. Raw bytes rather",
+              "than typed arrays so that loading the account is a copy, not a per-element decode (stack frame bound)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                1536
+              ]
+            }
+          },
+          {
+            "name": "share_supply",
+            "docs": [
+              "Mirror of the share mint supply, so that paths without the mint account (`trader_open_swap`) can value",
+              "queued shares (M-18). Asserted equal to the mint wherever the mint is present."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queued_shares",
+            "docs": [
+              "Mirror of the withdrawal queue's open epoch (M-18): shares queued and the slot of the epoch's first",
+              "request, zero when none. A new swap may not consume the capacity an eligible epoch is waiting for."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queue_first_slot",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_placed",
+            "docs": [
+              "USDC principal placed at the pool's reserve venue (the Stacked Treasuries reserve, `PoolReserve`). It is",
+              "LP capital that is not in the vault, so conservation counts it: `vault + reserve_placed >= accounted`.",
+              "Zero for a pool without a reserve."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserve_active",
+            "docs": [
+              "1 once `admin_enable_reserve` has created the pool's `PoolReserve`; payouts then report a short working",
+              "balance by name instead of failing inside the token program."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                15
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pricer",
+      "docs": [
+        "Which pricing curve quotes this pool. `External` is reserved for v1.1 (pricer CPI); creating such a pool",
+        "is permitted so governance can stage it, but quotes fail with `PricerMismatch` until the CPI path ships."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Vernier"
+          },
+          {
+            "name": "External",
+            "fields": [
+              {
+                "name": "program",
+                "type": "pubkey"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VernierParamsOnChain",
+      "docs": [
+        "Vernier parameters as stored on chain (mirror of `vernier::Params`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "model_pay_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "model_rec_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "term_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          },
+          {
+            "name": "demand_k_bp",
+            "type": "u16"
+          },
+          {
+            "name": "demand_cap_bp",
+            "type": "u16"
+          },
+          {
+            "name": "collateral_bp",
+            "type": {
+              "array": [
+                "u16",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -60,6 +60,17 @@ pub fn sigw(k: Pubkey) -> AccountMeta {
 pub fn evt(program: Pubkey) -> [AccountMeta; 2] {
     [ro(event_authority(&program)), ro(program)]
 }
+/// `ComputeBudget::SetComputeUnitLimit` (discriminator 2, little-endian u32), as the app and the keeper send in
+/// front of an instruction whose venue calls take it past the default budget.
+pub fn budget_ix(units: u32) -> Instruction {
+    let mut data = vec![2u8];
+    data.extend_from_slice(&units.to_le_bytes());
+    Instruction {
+        program_id: Pubkey::from_str_const("ComputeBudget111111111111111111111111111111"),
+        accounts: vec![],
+        data,
+    }
+}
 
 impl Env {
     pub fn send(
@@ -834,7 +845,10 @@ impl Env {
                 evt(SWAP_AMM).to_vec(),
             ]
             .concat(),
-            data: data("admin_update_basis_pair", &SetBasisPairArgs { correlation_bp }),
+            data: data(
+                "admin_update_basis_pair",
+                &SetBasisPairArgs { correlation_bp },
+            ),
         }
     }
     /// The swap PDA of a leg on an arbitrary pool (basis legs share one seed across two pools).

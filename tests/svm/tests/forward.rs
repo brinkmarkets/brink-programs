@@ -43,7 +43,10 @@ fn forward_open_start_and_settle() {
     assert_eq!(s.link_flags, LINK_FORWARD);
     assert_eq!(s.start_ts, opened + 28 * DAY);
     assert_eq!(s.matures_ts, s.start_ts + 60 * DAY);
-    assert_eq!(s.index_accrual_start, 0, "start reading waits for the crank");
+    assert_eq!(
+        s.index_accrual_start, 0,
+        "start reading waits for the crank"
+    );
     // Collateral for a 60-day tenor is 230 bp; the opening fee 5 bp; both at open.
     assert_eq!(s.collateral, 23_000 * USDC);
     let p: Pool = e.acct("Pool", &e.pool);
@@ -54,13 +57,22 @@ fn forward_open_start_and_settle() {
     // The forward book terms: no accrued leg, the remaining-term leg over the swap's own term.
     assert_eq!(p.book_pay.notional, 0);
     assert_eq!(p.book_pay.accrual_start, 0);
-    assert_eq!(p.book_pay.maturity_weight, i128::from(NOTIONAL) * 60 * i128::from(DAY));
-    assert_eq!(p.book_pay.fixed_leg, i128::from(NOTIONAL) * 730 * 60 * i128::from(DAY));
+    assert_eq!(
+        p.book_pay.maturity_weight,
+        i128::from(NOTIONAL) * 60 * i128::from(DAY)
+    );
+    assert_eq!(
+        p.book_pay.fixed_leg,
+        i128::from(NOTIONAL) * 730 * 60 * i128::from(DAY)
+    );
 
     // The crank is refused before the start, and on a spot swap.
     let ix = e.start_forward_ix(&tr.pubkey(), 1);
     e.must_fail(&[ix], &[], "ForwardNotDue");
-    let ix = e.open_ix(&tr.pubkey(), &open_args(LegKind::ReceiveFixed, 0, 1_000 * USDC, 0, 9));
+    let ix = e.open_ix(
+        &tr.pubkey(),
+        &open_args(LegKind::ReceiveFixed, 0, 1_000 * USDC, 0, 9),
+    );
     e.must(&[ix], &[&tr]);
     let ix = e.start_forward_ix(&tr.pubkey(), 9);
     e.must_fail(&[ix], &[], "NotForward");
@@ -83,11 +95,16 @@ fn forward_open_start_and_settle() {
     assert_eq!(s.link_flags, LINK_FORWARD | FORWARD_STARTED);
     assert_eq!(s.index_accrual_start, accrual_at_start);
     let p: Pool = e.acct("Pool", &e.pool);
-    assert_eq!(p.book_pay.notional, i128::from(NOTIONAL), "ordinary terms from the start on");
+    assert_eq!(
+        p.book_pay.notional,
+        i128::from(NOTIONAL),
+        "ordinary terms from the start on"
+    );
     // The book keeps the accrual in whole units (`accrual_e18 / 1e18`), signed by the leg and scaled by notional.
     assert_eq!(
         p.book_pay.accrual_start,
-        i128::from(NOTIONAL) * i128::try_from(accrual_at_start / 1_000_000_000_000_000_000).unwrap()
+        i128::from(NOTIONAL)
+            * i128::try_from(accrual_at_start / 1_000_000_000_000_000_000).unwrap()
     );
     let ix = e.start_forward_ix(&tr.pubkey(), 1);
     e.must_fail(&[ix], &[], "ForwardAlreadyStarted");
@@ -101,10 +118,18 @@ fn forward_open_start_and_settle() {
     let pnl = 170u128 * 1_000_000 * u128::from(USDC) * 60 / (10_000 * 365);
     let payout = 23_000 * u128::from(USDC) + pnl - pnl / 10;
     let trader_after = e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
-    assert_eq!(u128::from(trader_after - trader_before), payout, "forward settles over its own term");
+    assert_eq!(
+        u128::from(trader_after - trader_before),
+        payout,
+        "forward settles over its own term"
+    );
     let p: Pool = e.acct("Pool", &e.pool);
     assert_eq!(p.open_swaps, 1, "only the spot swap remains");
-    assert_eq!(p.book_pay, BookSide::default(), "book returns to zero for the pay side");
+    assert_eq!(
+        p.book_pay,
+        BookSide::default(),
+        "book returns to zero for the pay side"
+    );
 }
 
 #[test]
@@ -127,7 +152,10 @@ fn forward_cancel_before_start_prices_on_the_curve_and_clears_the_book() {
     e.must(&[ix], &[&tr]);
     let after = e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
     let got = after - before;
-    assert!(got > 0 && got < s.collateral, "cancel pays collateral less the curve spread, got {got}");
+    assert!(
+        got > 0 && got < s.collateral,
+        "cancel pays collateral less the curve spread, got {got}"
+    );
     let p: Pool = e.acct("Pool", &e.pool);
     assert_eq!(p.open_swaps, 0);
     assert_eq!(p.book_rec, BookSide::default());

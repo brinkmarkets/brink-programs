@@ -206,10 +206,7 @@ pub(crate) fn check_basis_entry(
         require!(pool.tvl > 0, BrinkError::PoolInvariant);
         require!(notional >= pool.min_notional, BrinkError::NotionalTooSmall);
         require!(notional <= pool.max_notional, BrinkError::NotionalTooLarge);
-        require!(
-            notional <= vernier::leg_capacity(&pool.vernier_pool(), leg),
-            BrinkError::LegCap
-        );
+        require!(notional <= pool.leg_capacity(leg), BrinkError::LegCap);
         super::queue::require_queue_priority(pool, leg, notional, slot)?;
     }
     Ok(())
@@ -217,7 +214,10 @@ pub(crate) fn check_basis_entry(
 
 /// Opens the two legs. Pool A and pool B must differ (the pair record guarantees it), the benchmarks are each
 /// pool's own, the legs share tenor, notional and seed and are linked to each other by key.
-pub fn open_basis_swap(ctx: Context<TraderOpenBasisSwap>, a: OpenBasisSwapArgs) -> Result<()> {
+pub fn open_basis_swap<'info>(
+    ctx: Context<'info, TraderOpenBasisSwap<'info>>,
+    a: OpenBasisSwapArgs,
+) -> Result<()> {
     let clock = Clock::get()?;
     require!(
         ctx.accounts.pool_a.key() != ctx.accounts.pool_b.key(),
@@ -282,6 +282,7 @@ pub fn open_basis_swap(ctx: Context<TraderOpenBasisSwap>, a: OpenBasisSwapArgs) 
             swap_bump: bump_a,
             vault: &mut x.vault_a,
             hook_program: x.hook_program_a.as_ref(),
+            hook_accounts: ctx.remaining_accounts,
         };
         let o = open_leg(
             &sh,
@@ -306,6 +307,7 @@ pub fn open_basis_swap(ctx: Context<TraderOpenBasisSwap>, a: OpenBasisSwapArgs) 
             swap_bump: bump_b,
             vault: &mut x.vault_b,
             hook_program: x.hook_program_b.as_ref(),
+            hook_accounts: ctx.remaining_accounts,
         };
         let o = open_leg(
             &sh,
@@ -502,7 +504,9 @@ mod tests {
             queue_first_slot: 0,
             limited_window_start: 0,
             limited_window_notional: 0,
-            _reserved: [0; 24],
+            reserve_placed: 0,
+            reserve_active: 0,
+            _reserved: [0; 15],
         }
     }
     fn benchmark(value_bp: u16, slot: u64) -> Benchmark {
@@ -536,10 +540,11 @@ mod tests {
             ema_milli_bp: 0,
             fixing_first_day: 0,
             fixing_head_day: 0,
-            fixings: [0; brink_index::FIXING_BYTES],
+            fixings: Box::new([0; brink_index::FIXING_BYTES]),
             ema_slot: slot,
             accepted_slot: slot,
-            _reserved: [0; 12],
+            support_lost: false,
+            _reserved: [0; 11],
         }
     }
     fn swap(leg: LegKind, link: Pubkey, flags: u8) -> Swap {

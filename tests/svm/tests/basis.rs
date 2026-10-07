@@ -81,11 +81,12 @@ fn basis_open_books_two_linked_legs_with_the_offset_on_demand_only() {
     ix.accounts[1] = AccountMeta::new_readonly(stranger.pubkey(), true);
     t.e.must_fail(&[ix], &[&stranger], "ConstraintHasOne");
     enable_pair(&mut t, 0);
-    let pair: BasisPair = t.e.acct(
-        "BasisPair",
-        &Env::basis_pair_pda(&t.a.pool, &t.b.pool),
+    let pair: BasisPair =
+        t.e.acct("BasisPair", &Env::basis_pair_pda(&t.a.pool, &t.b.pool));
+    assert_eq!(
+        (pair.pool_a, pair.pool_b, pair.correlation_bp),
+        (t.a.pool, t.b.pool, 0)
     );
-    assert_eq!((pair.pool_a, pair.pool_b, pair.correlation_bp), (t.a.pool, t.b.pool, 0));
 
     // Without an offset each leg is the ordinary quote on its pool: pay on A 684 + 31 + 2 + 7 = 724, receive
     // on B 500 - 14 - 2 - 7 = 477 (trapezoid demand over the fill, as in the single-swap e2e test).
@@ -108,8 +109,14 @@ fn basis_open_books_two_linked_legs_with_the_offset_on_demand_only() {
     assert_eq!(sb.collateral, 33_000 * USDC);
     let pa: Pool = t.e.acct("Pool", &t.a.pool);
     let pb: Pool = t.e.acct("Pool", &t.b.pool);
-    assert_eq!((pa.open_swaps, pa.open_pay_notional, pa.util_pay_bp), (1, NOTIONAL, 1_000));
-    assert_eq!((pb.open_swaps, pb.open_rec_notional, pb.util_rec_bp), (1, NOTIONAL, 1_000));
+    assert_eq!(
+        (pa.open_swaps, pa.open_pay_notional, pa.util_pay_bp),
+        (1, NOTIONAL, 1_000)
+    );
+    assert_eq!(
+        (pb.open_swaps, pb.open_rec_notional, pb.util_rec_bp),
+        (1, NOTIONAL, 1_000)
+    );
     assert_eq!(pa.collateral_held, 33_000 * USDC);
     assert_eq!(pb.collateral_held, 33_000 * USDC);
     assert_eq!(
@@ -135,8 +142,10 @@ fn basis_open_books_two_linked_legs_with_the_offset_on_demand_only() {
     second.client_seed = SEED + 1;
     let ix = t.e.open_basis_ix(&tr.pubkey(), &t.a, &t.b, &second);
     t.e.must(&[ix], &[&tr]);
-    let sa2: Swap = t.e.acct("Swap", &Env::swap_pda_on(&t.a.pool, &tr.pubkey(), SEED + 1));
-    let sb2: Swap = t.e.acct("Swap", &Env::swap_pda_on(&t.b.pool, &tr.pubkey(), SEED + 1));
+    let sa2: Swap =
+        t.e.acct("Swap", &Env::swap_pda_on(&t.a.pool, &tr.pubkey(), SEED + 1));
+    let sb2: Swap =
+        t.e.acct("Swap", &Env::swap_pda_on(&t.b.pool, &tr.pubkey(), SEED + 1));
     assert_eq!(sa2.fixed_bp, 726);
     assert_eq!(sb2.fixed_bp, 475);
     // Each leg's own limit is enforced: one basis point tighter on either side refuses the whole open.
@@ -167,13 +176,31 @@ fn linked_cancel_pays_the_net_with_one_floor_and_single_leg_cancel_is_refused() 
     refresh(&mut t);
 
     // Neither leg can be cancelled on its own while the other is open.
-    let ix = t.e.close_ix("trader_cancel_swap", &tr.pubkey(), SEED, &tr.pubkey(), &0u64);
+    let ix = t.e.close_ix(
+        "trader_cancel_swap",
+        &tr.pubkey(),
+        SEED,
+        &tr.pubkey(),
+        &0u64,
+    );
     t.e.must_fail(&[ix], &[&tr], "LinkedLeg");
     let old = t.e.use_pool(&t.b);
-    let ix = t.e.close_ix("trader_cancel_swap", &tr.pubkey(), SEED, &tr.pubkey(), &0u64);
+    let ix = t.e.close_ix(
+        "trader_cancel_swap",
+        &tr.pubkey(),
+        SEED,
+        &tr.pubkey(),
+        &0u64,
+    );
     t.e.must_fail(&[ix], &[&tr], "LinkedLeg");
     // Naming an unrelated live account as the partner does not satisfy the orphan rule either.
-    let mut ix = t.e.close_ix("trader_cancel_swap", &tr.pubkey(), SEED, &tr.pubkey(), &0u64);
+    let mut ix = t.e.close_ix(
+        "trader_cancel_swap",
+        &tr.pubkey(),
+        SEED,
+        &tr.pubkey(),
+        &0u64,
+    );
     ix.accounts.push(AccountMeta::new_readonly(ka, false));
     t.e.must_fail(&[ix], &[&tr], "LinkedLeg");
     t.e.use_pool(&old);
@@ -187,7 +214,13 @@ fn linked_cancel_pays_the_net_with_one_floor_and_single_leg_cancel_is_refused() 
 
     // The floor applies to the sum: more than both collaterals is refused, zero passes.
     let before = t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
-    let ix = t.e.cancel_basis_ix(&tr.pubkey(), &t.a, &t.b, SEED, sa.collateral + sb.collateral + 1);
+    let ix = t.e.cancel_basis_ix(
+        &tr.pubkey(),
+        &t.a,
+        &t.b,
+        SEED,
+        sa.collateral + sb.collateral + 1,
+    );
     t.e.must_fail(&[ix], &[&tr], "Slippage");
     let ix = t.e.cancel_basis_ix(&tr.pubkey(), &t.a, &t.b, SEED, 1);
     let logs = t.e.must(&[ix], &[&tr]);
@@ -201,13 +234,30 @@ fn linked_cancel_pays_the_net_with_one_floor_and_single_leg_cancel_is_refused() 
         .iter()
         .filter(|l| l.contains(&format!("Program {SWAP_AMM} invoke [2]")))
         .count();
-    assert_eq!(emitted, 3, "two SwapClosed and one BasisSwapClosed\n{}", logs.join("\n"));
-    assert!(t.e.svm.get_account(&ka).is_none(), "leg A closed to the trader");
-    assert!(t.e.svm.get_account(&kb).is_none(), "leg B closed to the trader");
+    assert_eq!(
+        emitted,
+        3,
+        "two SwapClosed and one BasisSwapClosed\n{}",
+        logs.join("\n")
+    );
+    assert!(
+        t.e.svm.get_account(&ka).is_none(),
+        "leg A closed to the trader"
+    );
+    assert!(
+        t.e.svm.get_account(&kb).is_none(),
+        "leg B closed to the trader"
+    );
     let pa: Pool = t.e.acct("Pool", &t.a.pool);
     let pb: Pool = t.e.acct("Pool", &t.b.pool);
-    assert_eq!((pa.open_swaps, pa.collateral_held, pa.open_pay_notional), (0, 0, 0));
-    assert_eq!((pb.open_swaps, pb.collateral_held, pb.open_rec_notional), (0, 0, 0));
+    assert_eq!(
+        (pa.open_swaps, pa.collateral_held, pa.open_pay_notional),
+        (0, 0, 0)
+    );
+    assert_eq!(
+        (pb.open_swaps, pb.collateral_held, pb.open_rec_notional),
+        (0, 0, 0)
+    );
     assert_eq!(
         t.e.token_amount(&t.a.vault),
         pa.tvl + pa.fees_buyback_accrued + pa.fees_treasury_accrued
@@ -238,7 +288,8 @@ fn liquidation_of_one_leg_leaves_the_other_and_frees_the_orphan() {
         let old = t.e.use_pool(&t.b);
         let bb: Benchmark = t.e.acct("Benchmark", &t.b.benchmark);
         t.e.publish((bb.ema_bp + 300).min(30_000)).unwrap();
-        let ix = t.e.close_ix("crank_liquidate_swap", &tr.pubkey(), SEED, &cranker, &());
+        let ix =
+            t.e.close_ix("crank_liquidate_swap", &tr.pubkey(), SEED, &cranker, &());
         let r = t.e.send(&[ix], &[]);
         t.e.use_pool(&old);
         match r {
@@ -249,8 +300,14 @@ fn liquidation_of_one_leg_leaves_the_other_and_frees_the_orphan() {
             Err(err) => assert!(err.contains("NotLiquidatable"), "{err}"),
         }
     }
-    assert!(liquidated, "the receive-fixed leg must exhaust as its index runs up");
-    assert!(t.e.svm.get_account(&kb).is_none(), "leg B closed by the crank");
+    assert!(
+        liquidated,
+        "the receive-fixed leg must exhaust as its index runs up"
+    );
+    assert!(
+        t.e.svm.get_account(&kb).is_none(),
+        "leg B closed by the crank"
+    );
     let sa: Swap = t.e.acct("Swap", &ka);
     assert_eq!(sa.state, SwapState::Open);
     assert_eq!((sa.link, sa.link_flags), (kb, LINK_BASIS));
@@ -258,23 +315,41 @@ fn liquidation_of_one_leg_leaves_the_other_and_frees_the_orphan() {
     let pb: Pool = t.e.acct("Pool", &t.b.pool);
     assert_eq!((pa.open_swaps, pa.collateral_held), (1, sa.collateral));
     assert_eq!((pb.open_swaps, pb.collateral_held), (0, 0));
-    assert!(pb.tvl >= 10_000_000 * USDC + sb.collateral * 9_900 / 10_000 - 1, "pool B kept the exhausted collateral");
+    assert!(
+        pb.tvl >= 10_000_000 * USDC + sb.collateral * 9_900 / 10_000 - 1,
+        "pool B kept the exhausted collateral"
+    );
     // The linked cancel can no longer pair the legs.
     let ix = t.e.cancel_basis_ix(&tr.pubkey(), &t.a, &t.b, SEED, 0);
     t.e.must_fail(&[ix], &[&tr], "AccountNotInitialized");
     // The orphaned leg A: the ordinary cancel is refused without the partner, and allowed once the partner
     // account is shown to be closed, at the ordinary opposite quote on pool A.
-    let ix = t.e.close_ix("trader_cancel_swap", &tr.pubkey(), SEED, &tr.pubkey(), &0u64);
+    let ix = t.e.close_ix(
+        "trader_cancel_swap",
+        &tr.pubkey(),
+        SEED,
+        &tr.pubkey(),
+        &0u64,
+    );
     t.e.must_fail(&[ix], &[&tr], "LinkedLeg");
     let before = t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
-    let mut ix = t.e.close_ix("trader_cancel_swap", &tr.pubkey(), SEED, &tr.pubkey(), &0u64);
+    let mut ix = t.e.close_ix(
+        "trader_cancel_swap",
+        &tr.pubkey(),
+        SEED,
+        &tr.pubkey(),
+        &0u64,
+    );
     ix.accounts.push(AccountMeta::new_readonly(kb, false));
     t.e.must(&[ix], &[&tr]);
     assert!(t.e.svm.get_account(&ka).is_none());
     let after = t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
     assert!(after > before && after - before < sa.collateral);
     let pa: Pool = t.e.acct("Pool", &t.a.pool);
-    assert_eq!((pa.open_swaps, pa.collateral_held, pa.open_pay_notional), (0, 0, 0));
+    assert_eq!(
+        (pa.open_swaps, pa.collateral_held, pa.open_pay_notional),
+        (0, 0, 0)
+    );
     assert_eq!(
         t.e.token_amount(&t.a.vault),
         pa.tvl + pa.fees_buyback_accrued + pa.fees_treasury_accrued
@@ -305,19 +380,27 @@ fn each_leg_settles_at_maturity_through_the_crank() {
     let cranker = t.e.payer.pubkey();
     let before = t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
     // Leg A settles alone; leg B is open and linked until its own crank.
-    let ix = t.e.close_ix("crank_settle_swap", &tr.pubkey(), SEED, &cranker, &());
+    let ix =
+        t.e.close_ix("crank_settle_swap", &tr.pubkey(), SEED, &cranker, &());
     t.e.must(&[ix], &[]);
     assert!(t.e.svm.get_account(&ka).is_none());
     let sb: Swap = t.e.acct("Swap", &kb);
     assert_eq!(sb.state, SwapState::Open);
     let mid = t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
-    assert!(mid > before + sa.collateral, "pay-fixed leg settles at a gain");
+    assert!(
+        mid > before + sa.collateral,
+        "pay-fixed leg settles at a gain"
+    );
     t.e.use_pool(&t.b);
-    let ix = t.e.close_ix("crank_settle_swap", &tr.pubkey(), SEED, &cranker, &());
+    let ix =
+        t.e.close_ix("crank_settle_swap", &tr.pubkey(), SEED, &cranker, &());
     t.e.must(&[ix], &[]);
     assert!(t.e.svm.get_account(&kb).is_none());
     let after = t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET));
-    assert!(after > mid + sb.collateral, "receive-fixed leg settles at a gain");
+    assert!(
+        after > mid + sb.collateral,
+        "receive-fixed leg settles at a gain"
+    );
     let pa: Pool = t.e.acct("Pool", &t.a.pool);
     let pb: Pool = t.e.acct("Pool", &t.b.pool);
     assert_eq!((pa.open_swaps, pa.collateral_held), (0, 0));
@@ -354,7 +437,9 @@ fn absent_pair_and_a_failing_leg_b_refuse_the_whole_open() {
 
     // Leg B failing leaves no leg A behind: a third pool with too little capital for the receive leg.
     let bench_c = t.e.create_benchmark(*b"third-usdc\0\0\0\0\0\0", 450);
-    let c = t.e.create_pool(bench_c, None, HookFlags::default()).unwrap();
+    let c =
+        t.e.create_pool(bench_c, None, HookFlags::default())
+            .unwrap();
     t.e.use_pool(&c);
     let lp_c = t.e.new_actor(10_000 * USDC, true);
     t.e.deposit(&lp_c, 1_500 * USDC);
@@ -365,17 +450,32 @@ fn absent_pair_and_a_failing_leg_b_refuse_the_whole_open() {
     let ix = t.e.open_basis_ix(&tr.pubkey(), &t.a, &c, &args(9_999, 0));
     t.e.must_fail(&[ix], &[&tr], "LegCap");
     assert!(t.e.svm.get_account(&ka).is_none(), "no leg A left behind");
-    assert!(
-        t.e.svm
-            .get_account(&Env::swap_pda_on(&c.pool, &tr.pubkey(), SEED))
-            .is_none()
-    );
+    assert!(t
+        .e
+        .svm
+        .get_account(&Env::swap_pda_on(&c.pool, &tr.pubkey(), SEED))
+        .is_none());
     let pa: Pool = t.e.acct("Pool", &t.a.pool);
     assert_eq!(
-        (pa.open_swaps, pa.collateral_held, pa.open_pay_notional, pa.util_pay_bp, pa.tvl),
-        (snap_a.open_swaps, snap_a.collateral_held, snap_a.open_pay_notional, snap_a.util_pay_bp, snap_a.tvl)
+        (
+            pa.open_swaps,
+            pa.collateral_held,
+            pa.open_pay_notional,
+            pa.util_pay_bp,
+            pa.tvl
+        ),
+        (
+            snap_a.open_swaps,
+            snap_a.collateral_held,
+            snap_a.open_pay_notional,
+            snap_a.util_pay_bp,
+            snap_a.tvl
+        )
     );
-    assert_eq!(t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET)), trader_before);
+    assert_eq!(
+        t.e.token_amount(&ata(&tr.pubkey(), &USDC_DEVNET)),
+        trader_before
+    );
     // And a halt refuses a basis open like any other entry.
     t.e.set_mode(&au, OperatingMode::Halted).unwrap();
     let ix = t.e.open_basis_ix(&tr.pubkey(), &t.a, &t.b, &args(9_999, 0));

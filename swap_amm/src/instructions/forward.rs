@@ -57,7 +57,10 @@ pub struct TraderOpenForwardSwap<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn open_forward_swap(ctx: Context<TraderOpenForwardSwap>, a: OpenForwardSwapArgs) -> Result<()> {
+pub fn open_forward_swap<'info>(
+    ctx: Context<'info, TraderOpenForwardSwap<'info>>,
+    a: OpenForwardSwapArgs,
+) -> Result<()> {
     let clock = Clock::get()?;
     let swap_bump = ctx.bumps.swap;
     let start_days = vernier::START_DAYS
@@ -80,6 +83,7 @@ pub fn open_forward_swap(ctx: Context<TraderOpenForwardSwap>, a: OpenForwardSwap
         swap_bump,
         vault: &mut x.vault,
         hook_program: x.hook_program.as_ref(),
+        hook_accounts: ctx.remaining_accounts,
     };
     let args = OpenSwapArgs {
         leg: a.leg,
@@ -88,7 +92,14 @@ pub fn open_forward_swap(ctx: Context<TraderOpenForwardSwap>, a: OpenForwardSwap
         limit_rate_bp: a.limit_rate_bp,
         client_seed: a.client_seed,
     };
-    open_leg(&sh, &mut leg, &args, &clock, Pricing::Forward(start_days), None)?;
+    open_leg(
+        &sh,
+        &mut leg,
+        &args,
+        &clock,
+        Pricing::Forward(start_days),
+        None,
+    )?;
     leg.vault.reload()?;
     leg.pool.assert_invariants(leg.vault.amount)
 }
@@ -117,9 +128,15 @@ pub fn start_forward(ctx: Context<CrankStartForward>) -> Result<()> {
     );
     let b = &*x.benchmark;
     require!(b.published, BrinkError::BenchmarkNotPublished);
-    // The start is a UTC midnight at most 90 days back, so the fixings ring answers exactly; the lookup is total
-    // in any case and reports how it read (ADR-017).
+    // The start is a UTC midnight, so while it is within the fixings ring the lookup answers exactly. Once it
+    // has left the ring the reading would be a backward extrapolation from the latest segment, which the rate
+    // published most recently could steer, so the crank refuses to store it (external scan 2, finding 21); the
+    // settlement path then values the forward from the part of its own term still on chain (`settle_leg`).
     let (accrual_start, kind) = accrual_lookup(b, s.start_ts)?;
+    require!(
+        kind != brink_index::FixingKind::Fallback,
+        BrinkError::StartUnavailable
+    );
     pool.book_sub(&s.book_terms()?)?;
     s.index_accrual_start = accrual_start;
     s.link_flags |= FORWARD_STARTED;
@@ -175,10 +192,22 @@ mod tests {
         let fwd = swap(LegKind::PayFixed, LINK_FORWARD, 2_505_600, 1_000, 7_689_600);
         assert!(fwd.is_forward() && !fwd.is_started());
         assert_eq!(fwd.accrual_from(), 2_505_600);
-        let started = swap(LegKind::PayFixed, LINK_FORWARD | FORWARD_STARTED, 2_505_600, 1_000, 7_689_600);
+        let started = swap(
+            LegKind::PayFixed,
+            LINK_FORWARD | FORWARD_STARTED,
+            2_505_600,
+            1_000,
+            7_689_600,
+        );
         assert!(started.is_forward() && started.is_started());
         // A started flag without the forward flag is meaningless and reads as a spot swap.
-        let stray = swap(LegKind::PayFixed, FORWARD_STARTED, 2_505_600, 1_000, 7_689_600);
+        let stray = swap(
+            LegKind::PayFixed,
+            FORWARD_STARTED,
+            2_505_600,
+            1_000,
+            7_689_600,
+        );
         assert!(!stray.is_forward() && stray.is_started() && stray.accrual_from() == 1_000);
     }
 
@@ -206,7 +235,9 @@ mod tests {
         s.index_accrual_start = a_start;
         s.link_flags |= FORWARD_STARTED;
         p.book_add(&s.book_terms().unwrap()).unwrap();
-        let ordinary = BookTerms::for_swap(LegKind::PayFixed, s.notional, a_start, 700, start, matures).unwrap();
+        let ordinary =
+            BookTerms::for_swap(LegKind::PayFixed, s.notional, a_start, 700, start, matures)
+                .unwrap();
         assert_eq!(p.book_pay.notional, ordinary.notional);
         assert_eq!(p.book_pay.accrual_start, ordinary.accrual_start);
         assert_eq!(p.book_pay.maturity_weight, ordinary.maturity_weight);

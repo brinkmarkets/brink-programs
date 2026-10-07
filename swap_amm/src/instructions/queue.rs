@@ -28,8 +28,12 @@ use brink_index::Benchmark;
 
 /// Total utilisation (bp of TVL) above which the immediate `lp_withdraw` path refuses and points at the queue.
 /// Below the 8 000 bp open cap so a pool near its caps keeps a small immediate exit (ADR-009, decision 1).
-/// In `WithdrawOnly` the limit is zero: every withdrawal goes through the queue (decision 6).
+/// In `WithdrawOnly` every withdrawal goes through the queue (decision 6; see `require_immediate_exit`).
 pub const WITHDRAW_UTIL_BP: u32 = 7_000;
+/// Per-leg utilisation (bp of TVL) above which the immediate path refuses: the 4 800 bp leg cap scaled by the
+/// same margin as the total limit (7 000 of 8 000), so an immediate exit on a one-sided book leaves the queue the
+/// same share of the binding cap's capacity as on a balanced one (external scan 2, finding 11).
+pub const WITHDRAW_LEG_BP: u32 = 4_200;
 /// Minimum length of a queue epoch, measured from the epoch's first request: about one day at 400 ms slots.
 pub const WITHDRAW_EPOCH_SLOTS: u64 = 216_000;
 /// Processed epochs retained for claims. A slot is reused only when every request in it has been claimed.
@@ -85,12 +89,12 @@ impl WithdrawQueue {
     fn slot(&self, epoch: u64) -> Result<&EpochFill> {
         self.fills
             .get(ring_index(epoch))
-            .ok_or(BrinkError::EpochEvicted.into())
+            .ok_or_else(|| BrinkError::EpochEvicted.into())
     }
     fn slot_mut(&mut self, epoch: u64) -> Result<&mut EpochFill> {
         self.fills
             .get_mut(ring_index(epoch))
-            .ok_or(BrinkError::EpochEvicted.into())
+            .ok_or_else(|| BrinkError::EpochEvicted.into())
     }
 }
 
@@ -123,13 +127,6 @@ pub fn tvl_floor_for_caps(open_pay: u64, open_rec: u64) -> Result<u64> {
         .max(need(open_rec, vernier::CAP_LEG_BP)?)
         .max(need(total, vernier::CAP_TOTAL_BP)?);
     u64::try_from(floor).map_err(|_| BrinkError::Overflow.into())
-}
-
-/// Total utilisation after a withdrawal of `gross` from `tvl`, rounded up and saturating at 10 000 bp, so that
-/// any remaining exposure at all exceeds the zero limit of `WithdrawOnly` (external scan 1, M-9).
-pub fn total_util_after(pool: &Pool, gross: u64) -> Result<u32> {
-    let tvl = pool.tvl.checked_sub(gross).ok_or(BrinkError::Overflow)?;
-    total_util_bp_ceil(pool.open_pay_notional, pool.open_rec_notional, tvl)
 }
 
 /// Refuses a new swap that would leave an eligible withdrawal epoch less capacity than it needs (M-18). An epoch
@@ -167,13 +164,48 @@ pub fn require_queue_priority(
     Ok(())
 }
 
-/// Immediate-path limit for the mode (ADR-009, decisions 1 and 6).
-#[must_use]
-pub fn immediate_limit_bp(mode: OperatingMode) -> u32 {
-    match mode {
-        OperatingMode::WithdrawOnly => 0,
-        _ => WITHDRAW_UTIL_BP,
+/// The immediate-exit gate of `lp_withdraw` (ADR-009 as amended by external scan 2, findings 9, 11 and 17),
+/// checked before any transfer so a refusal is explicit and cheap:
+///
+/// * `WithdrawOnly` admits no immediate exit at all, an empty book included (finding 17);
+/// * the total utilisation after the exit, rounded up, must be within `WITHDRAW_UTIL_BP`, and each leg's within
+///   `WITHDRAW_LEG_BP`, so a one-sided book cannot be drained to its binding cap (finding 11);
+/// * an eligible queued epoch has first call on the capacity above the caps' floor, exactly as it has against a
+///   new swap (`require_queue_priority`): an immediate exit may only take what would remain after the epoch is
+///   served, valued at `effective`, the same price the crank will pay the epoch (finding 9). A swap open values
+///   the reservation at `tvl`, since it does not carry the venue accounts; the difference is the reserve's
+///   unrealised yield on the queued shares and is written up in the queue's documentation.
+pub fn require_immediate_exit(
+    pool: &Pool,
+    mode: OperatingMode,
+    gross: u64,
+    effective: u64,
+    slot: u64,
+) -> Result<()> {
+    require!(
+        mode != OperatingMode::WithdrawOnly,
+        BrinkError::UseWithdrawQueue
+    );
+    let tvl_after = pool.tvl.checked_sub(gross).ok_or(BrinkError::Overflow)?;
+    let (pay, rec) = (pool.open_pay_notional, pool.open_rec_notional);
+    require!(
+        total_util_bp_ceil(pay, rec, tvl_after)? <= WITHDRAW_UTIL_BP
+            && total_util_bp_ceil(pay, 0, tvl_after)? <= WITHDRAW_LEG_BP
+            && total_util_bp_ceil(0, rec, tvl_after)? <= WITHDRAW_LEG_BP,
+        BrinkError::UseWithdrawQueue
+    );
+    if pool.queued_shares > 0 && slot >= pool.queue_first_slot.saturating_add(WITHDRAW_EPOCH_SLOTS)
+    {
+        let floor = tvl_floor_for_caps(pay, rec)?;
+        let capacity = tvl_after.saturating_sub(floor);
+        let owed = amount_for(
+            pool.queued_shares,
+            effective.max(pool.tvl),
+            pool.share_supply,
+        )?;
+        require!(capacity >= owed, BrinkError::QueueHasPriority);
     }
+    Ok(())
 }
 
 /// Shares filled when `queued` shares worth `value` meet `capacity` USDC: `min(queued, floor(queued · C / V))`.
@@ -383,7 +415,7 @@ pub fn dequeue(ctx: Context<LpDequeueWithdraw>) -> Result<()> {
         pool: ctx.accounts.pool.key(),
         request: r.key(),
         lp: r.lp,
-        shares: r.shares,
+        shares: r.shares
     });
     Ok(())
 }
@@ -410,7 +442,7 @@ pub struct CrankProcessWithdrawals<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn process(ctx: Context<CrankProcessWithdrawals>) -> Result<()> {
+pub fn process<'info>(ctx: Context<'info, CrankProcessWithdrawals<'info>>) -> Result<()> {
     require!(
         ctx.accounts.global.mode != OperatingMode::Halted,
         BrinkError::Halted
@@ -428,19 +460,28 @@ pub fn process(ctx: Context<CrankProcessWithdrawals>) -> Result<()> {
     // The ring slot about to be reused must have no unclaimed requests; claims are permissionless.
     require!(q.slot(epoch)?.unclaimed == 0, BrinkError::EpochUnclaimed);
 
+    let supply = ctx
+        .accounts
+        .pool
+        .reconcile_share_supply(ctx.accounts.share_mint.supply)?;
+    let reserve = super::reserve::required_remaining(&ctx.accounts.pool, ctx.remaining_accounts)?;
     let pool = &ctx.accounts.pool;
-    let supply = ctx.accounts.share_mint.supply;
-    pool.assert_share_supply(supply)?;
     let queued = q.queued_shares;
     let now = clock.unix_timestamp;
     pool.require_no_matured_open(now)?;
-    // Conservative value, as in `lp_withdraw`: capital less what the pool owes the open book (ADR-008), through
-    // the virtual offsets for every fill including a full-supply one (external scan 1, L-21, L-24): the queue pays
-    // exactly what the immediate path would for the same shares, and capital attributable to the virtual shares
-    // stays in the pool rather than being left for the next depositor.
+    // Conservative value, as in `lp_withdraw`: capital less what the pool owes the open book (ADR-008) plus the
+    // reserve's unrealised yield, through the virtual offsets for every fill including a full-supply one
+    // (external scan 1, L-21, L-24): the queue pays exactly what the immediate path would for the same shares,
+    // and capital attributable to the virtual shares stays in the pool rather than being left for the next
+    // depositor.
     let b = &ctx.accounts.benchmark;
-    let effective =
-        pool.effective_tvl_for_withdraw(super::swap::accrual_at(b, now)?, b.value_bp, now)?;
+    let pending = super::reserve::pending_yield(reserve.as_ref(), pool, now)?;
+    let effective = pool.effective_tvl_for_withdraw(
+        super::swap::accrual_at(b, now)?,
+        b.value_bp,
+        now,
+        pending,
+    )?;
     let value = amount_for(queued, effective, supply)?;
     let floor = tvl_floor_for_caps(pool.open_pay_notional, pool.open_rec_notional)?;
     let capacity = pool.tvl.saturating_sub(floor);
@@ -571,8 +612,10 @@ pub struct LpClaimWithdrawal<'info> {
 }
 
 /// Pays a processed request. Allowed in every mode including `Halted`: the money was set aside at processing
-/// and belongs to the LP; paying it moves nothing that backs a swap.
-pub fn claim(ctx: Context<LpClaimWithdrawal>) -> Result<()> {
+/// and belongs to the LP; paying it moves nothing that backs a swap. A pool with a reserve recalls inline what
+/// the working balance lacks, in `Halted` too, so a processed entitlement is never stranded behind a crank that
+/// the mode refuses (external scan 2, finding 10).
+pub fn claim<'info>(ctx: Context<'info, LpClaimWithdrawal<'info>>) -> Result<()> {
     let r = &ctx.accounts.request;
     let q = &mut ctx.accounts.queue;
     require!(r.epoch < q.epoch, BrinkError::RequestNotProcessed);
@@ -604,7 +647,7 @@ pub fn claim(ctx: Context<LpClaimWithdrawal>) -> Result<()> {
     };
 
     let pool = &mut ctx.accounts.pool;
-    pool.assert_share_supply(ctx.accounts.share_mint.supply)?;
+    pool.reconcile_share_supply(ctx.accounts.share_mint.supply)?;
     pool.share_supply = pool
         .share_supply
         .checked_sub(dust_shares)
@@ -624,6 +667,26 @@ pub fn claim(ctx: Context<LpClaimWithdrawal>) -> Result<()> {
     let benchmark = pool.benchmark;
     let bump = pool.bump;
     let seeds: &[&[u8]] = &[b"pool", benchmark.as_ref(), &[bump]];
+    if ctx.accounts.vault.amount < paid {
+        if let Some(mut r) =
+            super::reserve::required_remaining(&ctx.accounts.pool, ctx.remaining_accounts)?
+        {
+            let short = paid
+                .checked_sub(ctx.accounts.vault.amount)
+                .ok_or(BrinkError::Overflow)?;
+            super::reserve::recall_inline(
+                &mut r,
+                &mut ctx.accounts.pool,
+                &mut ctx.accounts.vault,
+                &ctx.accounts.usdc_mint.to_account_info(),
+                &ctx.accounts.token_program.to_account_info(),
+                seeds,
+                short,
+            )?;
+        }
+    }
+    let pool = &mut ctx.accounts.pool;
+    pool.require_working(ctx.accounts.vault.amount, paid)?;
     if paid > 0 {
         transfer_checked(
             CpiContext::new_with_signer(
@@ -762,10 +825,63 @@ mod tests {
             .sum();
         assert!(sum <= net && net - sum < parts.len() as u64);
     }
+    /// External scan 2, findings 9, 11 and 17: the consolidated immediate-exit gate.
     #[test]
-    fn immediate_limit_is_zero_in_withdraw_only() {
-        assert_eq!(immediate_limit_bp(OperatingMode::WithdrawOnly), 0);
-        assert_eq!(immediate_limit_bp(OperatingMode::Normal), WITHDRAW_UTIL_BP);
-        assert_eq!(immediate_limit_bp(OperatingMode::Limited), WITHDRAW_UTIL_BP);
+    fn immediate_exit_gate_respects_mode_legs_and_the_eligible_queue() {
+        let gate = |p: &Pool, mode: OperatingMode, gross: u64, slot: u64| {
+            require_immediate_exit(p, mode, gross, p.tvl, slot)
+        };
+        let mut p = crate::instructions::swap::test_pool();
+        p.tvl = 1_000_000;
+        p.share_supply = 1_000_000;
+        // Finding 17: WithdrawOnly refuses even an empty book.
+        assert!(gate(&p, OperatingMode::WithdrawOnly, 1, 0).is_err());
+        assert!(gate(&p, OperatingMode::Normal, 1, 0).is_ok());
+        assert!(gate(&p, OperatingMode::Limited, 1, 0).is_ok());
+        assert!(gate(&p, OperatingMode::Normal, 1_000_000, 0).is_ok());
+        // Finding 11: 300 000 pay-fixed on 1 000 000. The total limit alone admitted a 375 000 exit, leaving the
+        // leg at its 48 percent cap and the queue nothing; the leg limit stops at 42 percent after the exit.
+        p.open_pay_notional = 300_000;
+        assert!(gate(&p, OperatingMode::Normal, 375_000, 0).is_err());
+        // 300 000 / 4 200 bp = 714 285.7, so TVL may fall to 714 286: a gross of 285 714 passes, 285 715 fails.
+        assert!(gate(&p, OperatingMode::Normal, 285_714, 0).is_ok());
+        assert!(gate(&p, OperatingMode::Normal, 285_715, 0).is_err());
+        // A balanced book binds on the total: 350 000 each side, TVL may fall to 1 000 000 (70 percent).
+        p.open_pay_notional = 350_000;
+        p.open_rec_notional = 350_000;
+        assert!(gate(&p, OperatingMode::Normal, 0, 0).is_ok());
+        assert!(gate(&p, OperatingMode::Normal, 1, 0).is_err());
+        // Finding 9: with 350 000 pay-fixed the caps' floor is 729 167 (48 percent) and the capacity 270 833. An
+        // eligible epoch of 200 000 shares is owed 199 800 through the virtual offsets, which leaves room for a
+        // 71 033 exit and refuses 71 034 with `QueueHasPriority`.
+        p.open_pay_notional = 350_000;
+        p.open_rec_notional = 0;
+        p.queued_shares = 200_000;
+        p.queue_first_slot = 1_000;
+        let eligible = 1_000 + WITHDRAW_EPOCH_SLOTS;
+        assert_eq!(amount_for(200_000, p.tvl, p.share_supply).unwrap(), 199_800);
+        assert!(gate(&p, OperatingMode::Normal, 71_033, eligible).is_ok());
+        let err = gate(&p, OperatingMode::Normal, 71_034, eligible).unwrap_err();
+        assert_eq!(err, Error::from(BrinkError::QueueHasPriority));
+        // Before the epoch is eligible the leg limit alone decides: 350 000 / 4 200 bp = 833 333.3, so 166 666.
+        assert!(gate(&p, OperatingMode::Normal, 166_666, eligible - 1).is_ok());
+        assert!(gate(&p, OperatingMode::Normal, 166_667, eligible - 1).is_err());
+        // Review A-3: the reservation is valued at the price the crank pays. With 10 000 of unrealised reserve
+        // yield the epoch is owed 201 798, so the exit that passed at the stored price is refused and the room
+        // left is 69 035.
+        let priced = p.tvl + 10_000;
+        assert_eq!(
+            amount_for(200_000, priced, p.share_supply).unwrap(),
+            201_798
+        );
+        assert!(
+            require_immediate_exit(&p, OperatingMode::Normal, 71_033, priced, eligible).is_err()
+        );
+        assert!(
+            require_immediate_exit(&p, OperatingMode::Normal, 69_035, priced, eligible).is_ok()
+        );
+        assert!(
+            require_immediate_exit(&p, OperatingMode::Normal, 69_036, priced, eligible).is_err()
+        );
     }
 }

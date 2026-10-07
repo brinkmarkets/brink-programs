@@ -227,8 +227,12 @@ fn limit_rate_caps_and_withdraw_guard() {
     // A small withdrawal passes and pays the exit fee scaled by utilisation (external scan 1, M-16): 50 bp at a
     // fully used book, here 50 bp × 100,000 / 1,000,000 = 5 bp, so 50 USDC on 100,000.
     let p: Pool = e.acct("Pool", &e.pool);
-    let util_bp = (u128::from(p.open_pay_notional + p.open_rec_notional) * 10_000).div_ceil(u128::from(p.tvl));
-    assert_eq!(util_bp, 1_000, "one 100,000 swap against 1,000,000 of capital");
+    let util_bp = (u128::from(p.open_pay_notional + p.open_rec_notional) * 10_000)
+        .div_ceil(u128::from(p.tvl));
+    assert_eq!(
+        util_bp, 1_000,
+        "one 100,000 swap against 1,000,000 of capital"
+    );
     let before = e.token_amount(&ata(&lp.pubkey(), &USDC_DEVNET));
     let ix = e.withdraw_ix(&lp.pubkey(), 100_000 * USDC * SHARE, 0);
     e.must(&[ix], &[&lp]);
@@ -353,8 +357,23 @@ fn modes_guardian_scope_and_benchmark_guards() {
         .unwrap_err()
         .contains("GuardianScope"));
     assert!(e.set_mode(&tr, OperatingMode::Limited).is_err());
+    // WithdrawOnly admits no immediate exit, an empty book included (external scan 2, finding 17): the LP is
+    // pointed at the queue, which fills the whole request once the epoch has run.
     let ix = e.withdraw_ix(&lp.pubkey(), USDC * SHARE, 0);
+    e.must_fail(&[ix], &[&lp], "UseWithdrawQueue");
+    e.must(&[e.init_queue_ix()], &[]);
+    let ix = e.enqueue_ix(&lp.pubkey(), USDC * SHARE, 7);
     e.must(&[ix], &[&lp]);
+    e.warp(216_000, DAY);
+    e.publish(684).unwrap();
+    e.must(&[e.process_ix()], &[]);
+    let q: WithdrawQueue = e.acct("WithdrawQueue", &e.queue_pda());
+    assert_eq!(
+        q.fills[0].shares_filled,
+        USDC * SHARE,
+        "an empty book fills the whole epoch"
+    );
+    e.must(&[e.claim_ix(&lp.pubkey(), 7, &lp.pubkey())], &[&lp]);
     e.set_mode(&a, OperatingMode::Halted).unwrap();
     let ix = e.open_ix(
         &tr.pubkey(),
@@ -387,7 +406,6 @@ fn modes_guardian_scope_and_benchmark_guards() {
     e.must_fail(&[ix], &[&tr], "WithdrawOnly");
     let ix = e.withdraw_ix(&lp.pubkey(), 1_000 * USDC * SHARE, 0);
     e.must_fail(&[ix], &[&lp], "UseWithdrawQueue");
-    e.must(&[e.init_queue_ix()], &[]);
     let ix = e.enqueue_ix(&lp.pubkey(), 1_000 * USDC * SHARE, 9);
     e.must(&[ix], &[&lp]);
     e.set_mode(&a, OperatingMode::Normal).unwrap();
@@ -428,7 +446,10 @@ fn modes_guardian_scope_and_benchmark_guards() {
         "EMA moves between old and new, got {}",
         b.ema_bp
     );
-    assert_eq!(b.publish_count, 3);
+    assert_eq!(
+        b.publish_count, 4,
+        "three guard publishes and the one that kept the epoch fresh"
+    );
     assert!(!b.clamped, "an in-band publish clears the flag");
     // Settlement is not blocked by staleness (funds must never get stuck): warp past the midnight-aligned
     // maturity (28 days plus the balance of the opening day) without publishing.
@@ -1351,7 +1372,13 @@ fn adr008_share_price_marks_open_book_and_resists_inflation() {
     e.warp(30 * 216_000, 30 * DAY);
     e.publish(900).unwrap();
     let p: Pool = e.acct("Pool", &e.pool);
-    let shares = e.token_amount(&ata(&lp.pubkey(), &e.share_mint)) / 10;
+    // A tenth of the shares would take the pay leg from 40 % to over 44 % of TVL, past the 42 % per-leg
+    // immediate limit (external scan 2, finding 11): that exit is pointed at the queue. A twenty-fifth keeps
+    // the leg under the limit and goes through at once.
+    let tenth = e.token_amount(&ata(&lp.pubkey(), &e.share_mint)) / 10;
+    let ix = e.withdraw_ix(&lp.pubkey(), tenth, 0);
+    e.must_fail(&[ix], &[&lp], "UseWithdrawQueue");
+    let shares = e.token_amount(&ata(&lp.pubkey(), &e.share_mint)) / 25;
     let supply = e.mint_supply(&e.share_mint);
     let par = u128::from(shares) * u128::from(p.tvl) / u128::from(supply);
     let before = e.token_amount(&ata(&lp.pubkey(), &USDC_DEVNET));
@@ -1359,7 +1386,8 @@ fn adr008_share_price_marks_open_book_and_resists_inflation() {
     e.must(&[ix], &[&lp]);
     let got = u128::from(e.token_amount(&ata(&lp.pubkey(), &USDC_DEVNET)) - before);
     // The exit fee scales with utilisation (M-16), so the bound is par less the scaled fee.
-    let util_bp = (u128::from(p.open_pay_notional + p.open_rec_notional) * 10_000).div_ceil(u128::from(p.tvl));
+    let util_bp = (u128::from(p.open_pay_notional + p.open_rec_notional) * 10_000)
+        .div_ceil(u128::from(p.tvl));
     let fee = par * 50 * util_bp / 100_000_000;
     assert!(
         got < par - fee,
@@ -1487,9 +1515,11 @@ fn adr003_hooks_cannot_veto_exits() {
             bench2 = e.create_benchmark(*b"hooked-usdc-2\0\0\0", 684);
         }
     }
+    // Points 0 and 1 attack the open on the probe (covered in adversarial.rs), and since external scan 2
+    // (finding 25) the veto points run in `Limited` as well as `Normal`, so there is no mode in which a pool
+    // with those points enabled admits an open without the hook. The exits are the subject here: the deposit
+    // points stay live and the open points are off, so the positions open without a hook account.
     let live = HookFlags {
-        before_open: true,
-        after_open: true,
         before_deposit: true,
         after_deposit: true,
         ..HookFlags::default()
@@ -1501,10 +1531,12 @@ fn adr003_hooks_cannot_veto_exits() {
     // Points 4 and 5 observe and return Ok on the probe.
     let ix = e.deposit_ix_hook(&lp.pubkey(), 1_000_000 * USDC, 0, HOOK_PROGRAM);
     e.must(&[ix], &[&lp]);
-    // Points 0 and 1 attack the open on the probe (covered in adversarial.rs). The exits are the subject here,
-    // so the positions are opened under Limited mode, where no hook CPI is made.
+    // The deposit veto point runs in `Limited` too: a deposit without the hook account is refused there.
     let a = e.authority.insecure_clone();
     e.set_mode(&a, OperatingMode::Limited).unwrap();
+    let ix = e.deposit_ix(&lp.pubkey(), 1_000 * USDC, 0);
+    e.must_fail(&[ix], &[&lp], "HookMismatch");
+    e.set_mode(&a, OperatingMode::Normal).unwrap();
     let ix = e.open_ix(
         &tr.pubkey(),
         &open_args(LegKind::PayFixed, 0, 10_000 * USDC, 9_999, 1),
@@ -1515,7 +1547,6 @@ fn adr003_hooks_cannot_veto_exits() {
         &open_args(LegKind::PayFixed, 0, 10_000 * USDC, 9_999, 2),
     );
     e.must(&[ix], &[&tr]);
-    e.set_mode(&a, OperatingMode::Normal).unwrap();
     let ix = e.withdraw_ix(&lp.pubkey(), 1_000 * USDC * SHARE, 0);
     e.must(&[ix], &[&lp]);
     let ix = e.close_ix("trader_cancel_swap", &tr.pubkey(), 1, &tr.pubkey(), &0u64);

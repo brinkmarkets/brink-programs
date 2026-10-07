@@ -8,6 +8,78 @@
   },
   "instructions": [
     {
+      "name": "admin_cancel_calibration",
+      "docs": [
+        "Withdraws a queued calibration that has not yet taken effect; a due one is installed instead."
+      ],
+      "discriminator": [
+        132,
+        68,
+        107,
+        206,
+        59,
+        98,
+        221,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "admin_create_pool",
       "docs": [
         "Creates a pool for a benchmark, with its share mint, vault and optional hook set."
@@ -152,6 +224,222 @@
           "type": {
             "defined": {
               "name": "CreatePoolArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin_enable_reserve",
+      "docs": [
+        "Gives a pool a reserve: a venue on the pool's USDC whose receipts the pool PDA holds. Authority only."
+      ],
+      "discriminator": [
+        136,
+        144,
+        31,
+        75,
+        215,
+        28,
+        122,
+        90
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "venue",
+          "docs": [
+            "The venue the idle capital is placed at: settles in the pool's USDC and issues the receipt mint below."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                160,
+                141,
+                30,
+                34,
+                12,
+                82,
+                129,
+                1,
+                127,
+                59,
+                69,
+                152,
+                50,
+                157,
+                224,
+                188,
+                216,
+                50,
+                2,
+                27,
+                55,
+                224,
+                3,
+                134,
+                13,
+                69,
+                231,
+                39,
+                220,
+                115,
+                65,
+                43
+              ]
+            }
+          }
+        },
+        {
+          "name": "receipt_mint"
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "receipts",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  101,
+                  105,
+                  112,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "EnableReserveArgs"
             }
           }
         }
@@ -604,6 +892,114 @@
       ]
     },
     {
+      "name": "admin_set_reserve",
+      "docs": [
+        "Recalibrates or pauses a pool's reserve. Pausing stops placements; recalls and harvests continue."
+      ],
+      "discriminator": [
+        132,
+        199,
+        176,
+        81,
+        121,
+        59,
+        17,
+        52
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "reserve"
+          ]
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "SetReserveArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "admin_update_basis_pair",
       "docs": [
         "Governance changes an existing pair's correlation offset."
@@ -927,6 +1323,217 @@
           "relations": [
             "pool"
           ]
+        },
+        {
+          "name": "token_program",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "crank_rebalance_reserve",
+      "docs": [
+        "Permissionless: realises accrued yield into LP capital, then places the excess over the working band",
+        "or recalls the shortfall under it. The bounty comes from harvested yield only."
+      ],
+      "discriminator": [
+        190,
+        35,
+        211,
+        214,
+        107,
+        122,
+        30,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "global",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.benchmark",
+                "account": "Pool"
+              }
+            ]
+          },
+          "relations": [
+            "reserve"
+          ]
+        },
+        {
+          "name": "reserve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  115,
+                  101,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "receipts",
+          "writable": true,
+          "relations": [
+            "reserve"
+          ]
+        },
+        {
+          "name": "venue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  110,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "venue.benchmark",
+                "account": "Venue"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                160,
+                141,
+                30,
+                34,
+                12,
+                82,
+                129,
+                1,
+                127,
+                59,
+                69,
+                152,
+                50,
+                157,
+                224,
+                188,
+                216,
+                50,
+                2,
+                27,
+                55,
+                224,
+                3,
+                134,
+                13,
+                69,
+                231,
+                39,
+                220,
+                115,
+                65,
+                43
+              ]
+            }
+          },
+          "relations": [
+            "reserve"
+          ]
+        },
+        {
+          "name": "venue_benchmark"
+        },
+        {
+          "name": "venue_reserve",
+          "writable": true
+        },
+        {
+          "name": "receipt_mint",
+          "writable": true,
+          "relations": [
+            "reserve"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "global"
+          ]
+        },
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "cranker_usdc",
+          "writable": true
+        },
+        {
+          "name": "venue_event_authority"
+        },
+        {
+          "name": "venue_program",
+          "address": "Boj38zJFfsN72DBL2nrJEfk1ewskn11EbdikgHMBX7v2"
         },
         {
           "name": "token_program",
@@ -2951,6 +3558,19 @@
       ]
     },
     {
+      "name": "PoolReserve",
+      "discriminator": [
+        151,
+        148,
+        154,
+        130,
+        188,
+        104,
+        122,
+        165
+      ]
+    },
+    {
       "name": "Swap",
       "discriminator": [
         53,
@@ -3028,6 +3648,19 @@
         107,
         163,
         56
+      ]
+    },
+    {
+      "name": "CalibrationCancelled",
+      "discriminator": [
+        244,
+        219,
+        0,
+        121,
+        35,
+        82,
+        230,
+        251
       ]
     },
     {
@@ -3119,6 +3752,45 @@
         220,
         157,
         82
+      ]
+    },
+    {
+      "name": "ReserveConfigured",
+      "discriminator": [
+        109,
+        180,
+        202,
+        194,
+        38,
+        250,
+        19,
+        37
+      ]
+    },
+    {
+      "name": "ReserveEnabled",
+      "discriminator": [
+        179,
+        28,
+        135,
+        214,
+        103,
+        209,
+        216,
+        73
+      ]
+    },
+    {
+      "name": "ReserveRebalanced",
+      "discriminator": [
+        241,
+        218,
+        132,
+        50,
+        172,
+        186,
+        100,
+        110
       ]
     },
     {
@@ -3483,6 +4155,61 @@
       "code": 6053,
       "name": "NotForward",
       "msg": "swap is not a forward-starting swap"
+    },
+    {
+      "code": 6054,
+      "name": "ReserveParams",
+      "msg": "reserve parameters out of range"
+    },
+    {
+      "code": 6055,
+      "name": "ReserveVenue",
+      "msg": "the venue does not match the pool's settlement asset or its receipt mint"
+    },
+    {
+      "code": 6056,
+      "name": "ReserveInactive",
+      "msg": "the pool has no reserve"
+    },
+    {
+      "code": 6057,
+      "name": "WorkingBalanceShort",
+      "msg": "the working balance is short of this payout; rebalance the reserve first"
+    },
+    {
+      "code": 6058,
+      "name": "ReserveBalanced",
+      "msg": "the reserve is within its band and nothing accrued; nothing to move"
+    },
+    {
+      "code": 6059,
+      "name": "StartUnavailable",
+      "msg": "the forward's start has left the fixings record; settlement values it from the term itself"
+    },
+    {
+      "code": 6060,
+      "name": "ReserveAccountsRequired",
+      "msg": "the pool's reserve accounts must be passed when the reserve is active"
+    },
+    {
+      "code": 6061,
+      "name": "CalibrationPending",
+      "msg": "a queued calibration is still pending; cancel it or wait for it to apply"
+    },
+    {
+      "code": 6062,
+      "name": "NoCalibrationPending",
+      "msg": "no calibration is queued"
+    },
+    {
+      "code": 6063,
+      "name": "HedgeRateFloor",
+      "msg": "the hedge's fixed rate is below the series floor"
+    },
+    {
+      "code": 6064,
+      "name": "VenueNeedsTouch",
+      "msg": "the venue's index is behind its walk bound; touch the venue until current"
     }
   ],
   "types": [
@@ -3637,7 +4364,13 @@
       "name": "Benchmark",
       "docs": [
         "Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per",
-        "`version`; both programs upgrade together when it changes."
+        "`version`; both programs upgrade together when it changes.",
+        "",
+        "Space is declared by hand (`impl Space`) because the fixings ring is held in a `Box`: the account is about",
+        "2.7 KB and a by-value deserialisation of it needs two copies in one SBF stack frame, above the 4 KB frame",
+        "limit (the toolchain reports the overflow at build time). With the ring on the heap the struct is about 700",
+        "bytes on the stack and the ring is copied once, in its own frame. The wire layout is unchanged: a boxed array",
+        "serialises as the array."
       ],
       "type": {
         "kind": "struct",
@@ -3808,7 +4541,8 @@
               "lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every",
               "midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later",
               "(ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than",
-              "`[u128; N]` so that loading the account is a copy, not a per-element decode."
+              "`[u128; N]` so that loading the account is a copy, not a per-element decode; boxed so that copy is made",
+              "once, outside the account's own stack frame."
             ],
             "type": {
               "array": [
@@ -3834,11 +4568,21 @@
             "type": "u64"
           },
           {
+            "name": "support_lost",
+            "docs": [
+              "The observations behind the last accepted value no longer amount to a quorum of currently registered,",
+              "fresh publishers: set by `remove_publisher` and `set_publishers` for the benchmarks passed to them, by",
+              "`revalidate`, and by `publish` when fewer registered observations than the quorum are fresh. Degrades the",
+              "benchmark until the next accepted value clears it (external scan 2, finding 8)."
+            ],
+            "type": "bool"
+          },
+          {
             "name": "_reserved",
             "type": {
               "array": [
                 "u8",
-                12
+                11
               ]
             }
           }
@@ -3868,6 +4612,18 @@
           {
             "name": "fixed_leg",
             "type": "i128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CalibrationCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
           }
         ]
       }
@@ -3930,6 +4686,22 @@
           {
             "name": "max_notional",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EnableReserveArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "ReserveParams"
+              }
+            }
           }
         ]
       }
@@ -4710,11 +5482,28 @@
             "type": "u64"
           },
           {
+            "name": "reserve_placed",
+            "docs": [
+              "USDC principal placed at the pool's reserve venue (the Stacked Treasuries reserve, `PoolReserve`). It is",
+              "LP capital that is not in the vault, so conservation counts it: `vault + reserve_placed >= accounted`.",
+              "Zero for a pool without a reserve."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserve_active",
+            "docs": [
+              "1 once `admin_enable_reserve` has created the pool's `PoolReserve`; payouts then report a short working",
+              "balance by name instead of failing inside the token program."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "_reserved",
             "type": {
               "array": [
                 "u8",
-                24
+                15
               ]
             }
           }
@@ -4746,6 +5535,109 @@
       }
     },
     {
+      "name": "PoolReserve",
+      "docs": [
+        "The Stacked Treasuries reserve of one pool: idle LP capital placed at a venue that accrues a published Treasury",
+        "benchmark, so the LPs earn that base yield under the pool's spread. The pool keeps a working balance in its",
+        "vault for payouts; the permissionless `crank_rebalance_reserve` places what is above the band, recalls what is",
+        "below it and realises the accrued yield into LP capital, paying the cranker a bounty from that yield only."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "venue",
+            "docs": [
+              "`brink_venue` venue account the capital is placed at."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipts",
+            "docs": [
+              "Receipt token account owned by the pool PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "ReserveParams"
+              }
+            }
+          },
+          {
+            "name": "last_rebalance_slot",
+            "type": "u64"
+          },
+          {
+            "name": "yield_realised",
+            "docs": [
+              "Yield realised into LP capital to date, USDC 6 dp, after bounties."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bounties_paid",
+            "type": "u64"
+          },
+          {
+            "name": "placed_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "recalled_lifetime",
+            "type": "u64"
+          },
+          {
+            "name": "rebalances",
+            "type": "u32"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "No new placements while paused; recalls and harvests continue."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "last_place_slot",
+            "docs": [
+              "Slot of the last placement: the placement interval runs from here, so a harvest-only or recall-only crank",
+              "cannot postpone placing idle capital (external scan 2, finding 12)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                56
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "Pricer",
       "docs": [
         "Which pricing curve quotes this pool. `External` is reserved for v1.1 (pricer CPI); creating such a pool",
@@ -4770,6 +5662,164 @@
       }
     },
     {
+      "name": "ReserveConfigured",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "ReserveParams"
+              }
+            }
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveEnabled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve",
+            "type": "pubkey"
+          },
+          {
+            "name": "venue",
+            "type": "pubkey"
+          },
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "ReserveParams"
+              }
+            }
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveParams",
+      "docs": [
+        "Reserve calibration, set by the authority. Shares are of LP capital (`Pool::tvl`) in basis points."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "working_bps",
+            "docs": [
+              "Working balance the vault keeps for payouts, as a share of LP capital."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "band_bps",
+            "docs": [
+              "Hysteresis either side of the target before the crank moves anything."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "max_place_bps",
+            "docs": [
+              "Ceiling on principal placed, as a share of LP capital."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "min_interval_slots",
+            "docs": [
+              "Slots between two placements; a recall for a short working balance is never delayed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bounty_cap",
+            "docs": [
+              "Cap on the crank bounty, USDC 6 dp. The bounty is one percent of the yield harvested, never principal."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveRebalanced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          },
+          {
+            "name": "harvested",
+            "type": "u64"
+          },
+          {
+            "name": "bounty",
+            "type": "u64"
+          },
+          {
+            "name": "placed",
+            "type": "u64"
+          },
+          {
+            "name": "recalled",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_placed",
+            "type": "u64"
+          },
+          {
+            "name": "working",
+            "type": "u64"
+          },
+          {
+            "name": "tvl",
+            "type": "u64"
+          },
+          {
+            "name": "index_e18",
+            "type": "u128"
+          },
+          {
+            "name": "seq",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "SetBasisPairArgs",
       "type": {
         "kind": "struct",
@@ -4777,6 +5827,26 @@
           {
             "name": "correlation_bp",
             "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SetReserveArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "params",
+            "type": {
+              "defined": {
+                "name": "ReserveParams"
+              }
+            }
+          },
+          {
+            "name": "paused",
+            "type": "bool"
           }
         ]
       }
@@ -5056,6 +6126,123 @@
           {
             "name": "seq",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Venue",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "benchmark",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "index_e18",
+            "docs": [
+              "USDC per receipt base unit, scaled by 1e18."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "bench_accrual_e18",
+            "docs": [
+              "The benchmark's cumulative accrual at the last touch."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "tail_bps",
+            "docs": [
+              "Accrual counted at the last touch beyond the benchmark's last publication, in bp seconds."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "last_ts",
+            "type": "i64"
+          },
+          {
+            "name": "principal",
+            "docs": [
+              "USDC placed and not yet redeemed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "receipts",
+            "docs": [
+              "Receipt supply mirror."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "funded",
+            "docs": [
+              "USDC added to the reserve by `fund`, cumulative."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "anchor_index_e18",
+            "docs": [
+              "The index at 00:00 UTC of `anchor_day`, exact: the compounding anchor every reading is reconstructed from."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "anchor_day",
+            "docs": [
+              "UTC day number of the anchor midnight; zero on a version 1 account until its first accrual under this",
+              "build, which places the anchor from the stored index."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "anchor_accrual",
+            "docs": [
+              "The benchmark's cumulative accrual at the anchor midnight, in `accrual_e18` units."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                28
+              ]
+            }
           }
         ]
       }

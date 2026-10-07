@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["vernier", "swap_amm", "brink_index", "brink_timelock", "brink_sale"]
+members = ["vernier", "swap_amm", "brink_index", "brink_timelock", "brink_sale", "brink_allowlist", "brink_venue", "brink_vaults", "brink_split"]
 exclude = ["vernier/fuzz"]
 
 # Selects the pinned verifiable-build image (Solana CLI 3.1.10) for deterministic builds and on-chain verification.
@@ -23,6 +23,17 @@ overflow-checks = true      # never silently wrap on-chain
 lto = "fat"
 codegen-units = 1
 opt-level = 3
+
+# The product programs are size-optimised: devnet rent is paid per byte of program data and the four together would otherwise
+# exceed the deployer's balance. Optimisation level changes code size, never semantics; the SVM suite runs on the built objects.
+[profile.release.package.brink_allowlist]
+opt-level = "s"
+[profile.release.package.brink_venue]
+opt-level = "z"
+[profile.release.package.brink_vaults]
+opt-level = "z"
+[profile.release.package.brink_split]
+opt-level = "s"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }

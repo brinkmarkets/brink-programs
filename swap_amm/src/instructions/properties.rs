@@ -66,7 +66,9 @@ fn blank_pool(tvl: u64) -> Pool {
         queue_first_slot: 0,
         limited_window_start: 0,
         limited_window_notional: 0,
-        _reserved: [0; 24],
+        reserve_placed: 0,
+        reserve_active: 0,
+        _reserved: [0; 15],
     }
 }
 

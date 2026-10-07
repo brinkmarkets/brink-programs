@@ -373,6 +373,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "brink_allowlist"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "swap_amm",
+]
+
+[[package]]
 name = "brink_index"
 version = "0.1.0"
 dependencies = [
@@ -389,11 +397,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "brink_split"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "brink_index",
+ "brink_venue",
+ "swap_amm",
+]
+
+[[package]]
 name = "brink_timelock"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "solana-sha256-hasher",
+]
+
+[[package]]
+name = "brink_vaults"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "brink_index",
+ "brink_venue",
+ "swap_amm",
+]
+
+[[package]]
+name = "brink_venue"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "brink_index",
 ]
 
 [[package]]
@@ -2279,6 +2318,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "brink_index",
+ "brink_venue",
  "proptest",
  "vernier",
 ]

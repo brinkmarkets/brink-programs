@@ -40,6 +40,9 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::bpf_loader_upgradeable;
 
+pub mod accrual;
+pub use accrual::{accrual_at, accrual_lookup, oldest_known, rate_over, FixingKind};
+
 declare_id!("J2udZ8xzSsETsrSnbW3DeLFBTVooKRup3P7LWKSRwuvS");
 
 /// Fixed-point scale for `accrual_e18`.
@@ -208,6 +211,11 @@ pub mod brink_index {
         let fresh_slots = slots.get(..n).ok_or(IndexError::Overflow)?;
         let fresh_count = u8::try_from(n).map_err(|_| IndexError::Overflow)?;
         if n < usize::from(r.quorum) {
+            // No value can currently be agreed, so the cached one no longer has attainable support: degrade it
+            // rather than let it quote until its own freshness runs out (external scan 2, finding 8).
+            if b.published {
+                b.support_lost = true;
+            }
             emit_cpi!(ObservationRecorded {
                 benchmark: b.key(),
                 publisher: signer,
@@ -312,6 +320,7 @@ pub mod brink_index {
         b.unix_ts = clock.unix_timestamp;
         b.clamped = clamped;
         b.disputed = false;
+        b.support_lost = false;
         b.support = support;
         b.publish_count = b.publish_count.checked_add(1).ok_or(IndexError::Overflow)?;
         emit_cpi!(Published {
@@ -357,7 +366,9 @@ pub mod brink_index {
         require!(quorum >= 2 || r.single_publisher, IndexError::BadQuorum);
         r.publishers = publishers;
         r.quorum = quorum;
-        Ok(())
+        let registry_key = r.key();
+        let r = r.clone().into_inner();
+        revalidate_remaining(ctx.remaining_accounts, &registry_key, &r)
     }
 
     /// Tightening (immediate): the authority or the guardian removes one publisher. The quorum is unchanged, so
@@ -376,6 +387,21 @@ pub mod brink_index {
             .find(|p| **p == publisher && publisher != Pubkey::default())
             .ok_or(IndexError::NotAPublisher)?;
         *slot = Pubkey::default();
+        // Every benchmark passed alongside is re-examined against the reduced set in the same transaction: a
+        // value that rested on the removed publisher stops quoting at once rather than when its cached freshness
+        // runs out (external scan 2, finding 8). `revalidate` covers any benchmark not passed here.
+        let registry_key = r.key();
+        let r = r.clone().into_inner();
+        revalidate_remaining(ctx.remaining_accounts, &registry_key, &r)
+    }
+
+    /// Permissionless: flags a benchmark whose accepted value no longer rests on a quorum of registered, fresh
+    /// observations (`support_lost`), which degrades it until the next accepted value. Never clears the flag.
+    pub fn revalidate(ctx: Context<Revalidate>) -> Result<()> {
+        let now = Clock::get()?.slot;
+        let r = &ctx.accounts.registry;
+        let b = &mut ctx.accounts.benchmark;
+        b.revalidate_support(r, now);
         Ok(())
     }
 
@@ -400,6 +426,39 @@ pub mod brink_index {
         r.authority = new_authority;
         Ok(())
     }
+}
+
+/// Most benchmarks one publisher change re-examines in its own transaction: each is loaded onto the heap (its
+/// fixings ring is 2 KB), and the registry holds at most a few dozen benchmarks, so a change that touches more
+/// runs `revalidate` for the rest.
+pub const MAX_REVALIDATE: usize = 8;
+
+/// Re-examines the support of every benchmark passed as a remaining account against `r` (which must already
+/// reflect the publisher change) and flags the ones that have lost it. Each account must be a writable
+/// benchmark of this registry; anything else is refused so a caller cannot silently pass the wrong account.
+fn revalidate_remaining(
+    accounts: &[AccountInfo],
+    registry_key: &Pubkey,
+    r: &Registry,
+) -> Result<()> {
+    require!(
+        accounts.len() <= MAX_REVALIDATE,
+        IndexError::TooManyBenchmarks
+    );
+    let now = Clock::get()?.slot;
+    for acc in accounts {
+        require!(acc.is_writable, IndexError::BenchmarkNotWritable);
+        require_keys_eq!(*acc.owner, crate::ID, IndexError::WrongRegistry);
+        let mut data = acc.try_borrow_mut_data()?;
+        let mut cursor: &[u8] = &data;
+        let mut b = Box::new(Benchmark::try_deserialize(&mut cursor)?);
+        require_keys_eq!(b.registry, *registry_key, IndexError::WrongRegistry);
+        if b.revalidate_support(r, now) {
+            let mut out: &mut [u8] = &mut data;
+            b.try_serialize(&mut out)?;
+        }
+    }
+    Ok(())
 }
 
 /// Number of non-empty publishers; rejects duplicates and an empty set.
@@ -501,8 +560,20 @@ pub fn agreeing_value(values: &[u16], tolerance_bp: u16, prefer: Option<u16>) ->
         let Some(members) = s.get(lo..hi) else {
             continue;
         };
-        let value = lower_median(members);
         let size = members.len();
+        // With exactly two members the lower median is simply the lower observation, so one compromised
+        // publisher could pull a two-strong agreement down by the whole band while an honest observation stayed
+        // fresh (external scan 2, finding 7). A pair therefore resolves to the member nearest the current value:
+        // the honest observation holds the benchmark, and the other publisher can at most delay a move until a
+        // second honest observation arrives. Clusters of three or more keep the lower median.
+        let value = match (size, prefer) {
+            (2, Some(p)) => members
+                .iter()
+                .copied()
+                .min_by_key(|v| (v.abs_diff(p), *v))
+                .unwrap_or(0),
+            _ => lower_median(members),
+        };
         let better = match best {
             None => true,
             Some((bv, bs)) => {
@@ -652,8 +723,13 @@ pub struct Registry {
 
 /// Benchmark account. The swap AMM reads this layout directly (owner-checked), so field order is frozen per
 /// `version`; both programs upgrade together when it changes.
+///
+/// Space is declared by hand (`impl Space`) because the fixings ring is held in a `Box`: the account is about
+/// 2.7 KB and a by-value deserialisation of it needs two copies in one SBF stack frame, above the 4 KB frame
+/// limit (the toolchain reports the overflow at build time). With the ring on the heap the struct is about 700
+/// bytes on the stack and the ring is copied once, in its own frame. The wire layout is unchanged: a boxed array
+/// serialises as the array.
 #[account]
-#[derive(InitSpace)]
 pub struct Benchmark {
     pub version: u8,
     pub registry: Pubkey,
@@ -699,15 +775,59 @@ pub struct Benchmark {
     /// lives at byte offset `16 * (d % FIXING_DAYS)` as a little-endian `u128`. Written by `publish` for every
     /// midnight a segment crosses; read by the AMM to settle a swap at its maturity whatever was published later
     /// (ADR-006, review finding F-12, maths finding M-2, simulation finding S-3). Raw bytes rather than
-    /// `[u128; N]` so that loading the account is a copy, not a per-element decode.
-    pub fixings: [u8; FIXING_BYTES],
+    /// `[u128; N]` so that loading the account is a copy, not a per-element decode; boxed so that copy is made
+    /// once, outside the account's own stack frame.
+    pub fixings: Box<[u8; FIXING_BYTES]>,
     /// Slot at which the EMA last moved (or was confirmed equal to its input); the decay of the next step is
     /// measured from here, not from the last publication (M-11).
     pub ema_slot: u64,
     /// Slot of the transaction that last accepted a value. `slot` is the freshness of the data behind it (M-12);
     /// this is when the benchmark itself last moved, used to widen the band after an outage.
     pub accepted_slot: u64,
-    pub _reserved: [u8; 12],
+    /// The observations behind the last accepted value no longer amount to a quorum of currently registered,
+    /// fresh publishers: set by `remove_publisher` and `set_publishers` for the benchmarks passed to them, by
+    /// `revalidate`, and by `publish` when fewer registered observations than the quorum are fresh. Degrades the
+    /// benchmark until the next accepted value clears it (external scan 2, finding 8).
+    pub support_lost: bool,
+    pub _reserved: [u8; 11],
+}
+
+impl anchor_lang::Space for Benchmark {
+    /// Borsh size of every field in order; `layout_sizes_are_recorded` checks it against a serialised account.
+    const INIT_SPACE: usize = 1
+        + 32
+        + 16
+        + 32
+        + 2
+        + 2
+        + 8
+        + 8
+        + 16
+        + 8
+        + 2
+        + 8
+        + 8
+        + 1
+        + 8
+        + 1
+        + 2
+        + 8
+        + 2
+        + 8
+        + 2
+        + 8
+        + 1
+        + 1
+        + 1
+        + Observation::INIT_SPACE * MAX_PUBLISHERS
+        + 4
+        + 4
+        + 4
+        + FIXING_BYTES
+        + 8
+        + 8
+        + 1
+        + 11;
 }
 
 impl Benchmark {
@@ -730,21 +850,81 @@ impl Benchmark {
         if age > self.max_staleness_slots.saturating_mul(2) {
             return Tier::Stale;
         }
-        if age > self.max_staleness_slots || self.clamped || self.disputed {
+        if age > self.max_staleness_slots || self.clamped || self.disputed || self.support_lost {
             return Tier::Degraded;
         }
         Tier::Fresh
     }
 
+    /// The support the accepted value has right now, as opposed to `support`, which is the support it had when
+    /// it was accepted: the size of the largest group of fresh observations from currently registered publishers
+    /// that all lie within the band of one of their own members and include the accepted value within that
+    /// band. Acceptance measures agreement from a cluster centre, and a cluster can span up to twice the band,
+    /// so counting only the observations within the band of the accepted value could undercount a legitimate
+    /// cluster and flag `support_lost` while a quorum still agreed (review of external scan 2, B-4).
+    #[must_use]
+    pub fn current_support(&self, r: &Registry, now_slot: u64) -> u8 {
+        let mut fresh = [0u16; MAX_PUBLISHERS];
+        let mut n = 0usize;
+        for (i, obs) in self.observations.iter().enumerate() {
+            let registered = r.publishers.get(i).copied().unwrap_or_default();
+            if obs.publisher == Pubkey::default()
+                || obs.publisher != registered
+                || now_slot.saturating_sub(obs.slot) > self.max_staleness_slots
+            {
+                continue;
+            }
+            if let Some(slot) = fresh.get_mut(n) {
+                *slot = obs.value_bp;
+                n = n.saturating_add(1);
+            }
+        }
+        let Some(fresh) = fresh.get(..n) else {
+            return 0;
+        };
+        let mut best = 0usize;
+        for centre in fresh.iter().copied() {
+            if centre.abs_diff(self.value_bp) > self.band_bp {
+                continue;
+            }
+            let size = fresh
+                .iter()
+                .filter(|v| v.abs_diff(centre) <= self.band_bp)
+                .count();
+            best = best.max(size);
+        }
+        u8::try_from(best).unwrap_or(u8::MAX)
+    }
+
+    /// Flags the benchmark when its accepted value no longer rests on a quorum of registered, fresh
+    /// observations. Returns whether the flag was raised by this call.
+    pub fn revalidate_support(&mut self, r: &Registry, now_slot: u64) -> bool {
+        if !self.published || self.support_lost {
+            return false;
+        }
+        if self.current_support(r, now_slot) < r.quorum {
+            self.support_lost = true;
+            return true;
+        }
+        false
+    }
+
     /// UTC day number of a unix timestamp (floor division; timestamps before 1970 are not valid here).
     pub fn day_of(unix_ts: i64) -> Result<u32> {
-        u32::try_from(unix_ts.div_euclid(SECONDS_PER_DAY)).map_err(|_| IndexError::Overflow.into())
+        // Unsigned division: the SBF v0 instruction set has no signed divide, so `div_euclid` on `i64` is a
+        // software routine, and this runs once per midnight in the venue's index walk. Instants before 1970
+        // are refused either way.
+        let secs = u64::try_from(unix_ts).map_err(|_| IndexError::Overflow)?;
+        let day = secs
+            .checked_div(u64::try_from(SECONDS_PER_DAY).map_err(|_| IndexError::Overflow)?)
+            .ok_or(IndexError::Overflow)?;
+        u32::try_from(day).map_err(|_| IndexError::Overflow.into())
     }
     /// Midnight that starts UTC day `day`.
     pub fn day_start(day: u32) -> Result<i64> {
         i64::from(day)
             .checked_mul(SECONDS_PER_DAY)
-            .ok_or(IndexError::Overflow.into())
+            .ok_or_else(|| IndexError::Overflow.into())
     }
     /// Cumulative accrual at 00:00 UTC of `day`, if the ring still holds it. `None` for days before the first
     /// fixing, after the latest one, or older than `FIXING_DAYS` days before the latest one.
@@ -876,6 +1056,14 @@ pub struct GovernRegistry<'info> {
     pub authority: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct Revalidate<'info> {
+    #[account(seeds = [b"registry"], bump = registry.bump)]
+    pub registry: Box<Account<'info, Registry>>,
+    #[account(mut, has_one = registry, seeds = [b"benchmark", benchmark.id.as_ref()], bump = benchmark.bump)]
+    pub benchmark: Box<Account<'info, Benchmark>>,
+}
+
 /// Authority or guardian; checked in the handler.
 #[derive(Accounts)]
 pub struct GuardRegistry<'info> {
@@ -948,6 +1136,12 @@ pub enum IndexError {
     GuardianScope,
     #[msg("signer is not permitted to do this")]
     Unauthorised,
+    #[msg("benchmark passed for revalidation must be writable")]
+    BenchmarkNotWritable,
+    #[msg("more benchmarks passed than one transaction revalidates")]
+    TooManyBenchmarks,
+    #[msg("benchmark belongs to another registry")]
+    WrongRegistry,
 }
 
 #[cfg(test)]
@@ -985,10 +1179,11 @@ mod tests {
             ema_milli_bp: 0,
             fixing_first_day: 0,
             fixing_head_day: 0,
-            fixings: [0; FIXING_BYTES],
+            fixings: Box::new([0; FIXING_BYTES]),
             ema_slot: 0,
             accepted_slot: 0,
-            _reserved: [0; 12],
+            support_lost: false,
+            _reserved: [0; 11],
         }
     }
     /// Mirrors the accrual part of `publish` for host tests.
@@ -1322,10 +1517,11 @@ mod tests {
             ema_milli_bp: 0,
             fixing_first_day: 0,
             fixing_head_day: 0,
-            fixings: [0; FIXING_BYTES],
+            fixings: Box::new([0; FIXING_BYTES]),
             ema_slot: 1_000,
             accepted_slot: 1_000,
-            _reserved: [0; 12],
+            support_lost: false,
+            _reserved: [0; 11],
         };
         assert_eq!(b.tier(1_000), Tier::Fresh);
         assert_eq!(b.tier(3_000), Tier::Fresh, "age == max_staleness is fresh");
@@ -1337,8 +1533,140 @@ mod tests {
         b.clamped = false;
         b.disputed = true;
         assert_eq!(b.tier(1_000), Tier::Degraded);
+        b.disputed = false;
+        b.support_lost = true;
+        assert_eq!(
+            b.tier(1_000),
+            Tier::Degraded,
+            "lost support degrades (scan 2, F8)"
+        );
+        b.support_lost = false;
         b.published = false;
         assert_eq!(b.tier(1_000), Tier::Stale);
+    }
+
+    #[test]
+    fn removing_a_supporting_publisher_degrades_the_benchmark_until_the_next_acceptance() {
+        // External scan 2, finding 8: a value accepted on two publishers keeps quoting after one of them is
+        // revoked only until `revalidate_support` runs against the reduced set; a fresh acceptance clears it.
+        let pa = Pubkey::new_unique();
+        let pb = Pubkey::new_unique();
+        let pc = Pubkey::new_unique();
+        let mut publishers = [Pubkey::default(); MAX_PUBLISHERS];
+        publishers[0] = pa;
+        publishers[1] = pb;
+        publishers[2] = pc;
+        let mut r = Registry {
+            version: LAYOUT_VERSION,
+            authority: Pubkey::new_unique(),
+            guardian: Pubkey::new_unique(),
+            publishers,
+            quorum: 2,
+            single_publisher: false,
+            count: 0,
+            bump: 0,
+            _reserved: [0; 64],
+        };
+        let mut b = blank();
+        b.band_bp = 300;
+        b.max_staleness_slots = 2_000;
+        b.published = true;
+        b.value_bp = 1_000;
+        b.slot = 1_000;
+        b.observations[0] = Observation {
+            publisher: pa,
+            value_bp: 1_000,
+            slot: 1_000,
+        };
+        b.observations[1] = Observation {
+            publisher: pb,
+            value_bp: 1_010,
+            slot: 1_000,
+        };
+        assert_eq!(b.current_support(&r, 1_500), 2);
+        assert!(!b.revalidate_support(&r, 1_500));
+        assert_eq!(b.tier(1_500), Tier::Fresh);
+        // Revoke pb: only pa still supports the value, below the quorum of two.
+        r.publishers[1] = Pubkey::default();
+        assert_eq!(b.current_support(&r, 1_500), 1);
+        assert!(b.revalidate_support(&r, 1_500));
+        assert!(b.support_lost);
+        assert_eq!(b.tier(1_500), Tier::Degraded);
+        // The flag is sticky until a value is accepted again; re-adding the publisher alone does not clear it.
+        r.publishers[1] = pb;
+        assert!(!b.revalidate_support(&r, 1_500));
+        assert!(b.support_lost);
+        // An observation outside the band does not count as support even when fresh and registered.
+        b.support_lost = false;
+        b.observations[1] = Observation {
+            publisher: pb,
+            value_bp: 1_400,
+            slot: 1_500,
+        };
+        assert_eq!(b.current_support(&r, 1_500), 1);
+        assert!(b.revalidate_support(&r, 1_500));
+        // Review B-4: a cluster accepted around a centre can span twice the band. Observations 700, 701, 1 000
+        // and 1 300 agree with centre 1 000 and resolve to the lower median 701; 1 300 is 599 from 701 yet is
+        // part of the cluster that carries the value, so the support is four, not three.
+        let pd = Pubkey::new_unique();
+        r.publishers[3] = pd;
+        r.quorum = 4;
+        b.support_lost = false;
+        b.value_bp = 701;
+        for (i, (p, v)) in [(pa, 700u16), (pb, 701), (pc, 1_000), (pd, 1_300)]
+            .into_iter()
+            .enumerate()
+        {
+            b.observations[i] = Observation {
+                publisher: p,
+                value_bp: v,
+                slot: 1_500,
+            };
+        }
+        assert_eq!(b.current_support(&r, 1_500), 4);
+        assert!(!b.revalidate_support(&r, 1_500));
+        // Only groups whose centre is within the band of the accepted value count: with the value at 1 500 the
+        // one centre that reaches it is 1 300, whose group is 1 000 and 1 300.
+        b.value_bp = 1_500;
+        assert_eq!(b.current_support(&r, 1_500), 2);
+        // A benchmark that was never published has nothing to lose.
+        let mut fresh = blank();
+        assert!(!fresh.revalidate_support(&r, 1_500));
+        assert!(!fresh.support_lost);
+    }
+
+    #[test]
+    fn a_pair_resolves_to_the_observation_nearest_the_current_value() {
+        // External scan 2, finding 7: one compromised publisher posting 700 against a fresh honest 1 000 used to
+        // be accepted at 700 (the lower median of a pair) while the benchmark stayed Fresh. The pair now resolves
+        // to the member nearest the current value, so the honest observation holds.
+        assert_eq!(agreeing_value(&[700, 1_000], 300, Some(1_000)), (1_000, 2));
+        assert_eq!(
+            agreeing_value(&[1_000, 1_300], 300, Some(1_000)),
+            (1_000, 2)
+        );
+        // Honest move to 1 050 with the other publisher pinned at the old value: the move waits.
+        assert_eq!(
+            agreeing_value(&[1_000, 1_050], 300, Some(1_000)),
+            (1_000, 2)
+        );
+        // Both moved: the nearer one wins; equidistant pairs resolve to the lower value.
+        assert_eq!(
+            agreeing_value(&[1_040, 1_060], 300, Some(1_000)),
+            (1_040, 2)
+        );
+        assert_eq!(agreeing_value(&[900, 1_100], 300, Some(1_000)), (900, 2));
+        // First acceptance (nothing to prefer) and clusters of three keep the lower median.
+        assert_eq!(agreeing_value(&[700, 1_000], 300, None), (700, 2));
+        assert_eq!(
+            agreeing_value(&[700, 900, 1_000], 300, Some(1_000)),
+            (900, 3)
+        );
+        // A pair that is one cluster of a larger disputed set follows the same rule.
+        assert_eq!(
+            agreeing_value(&[700, 1_000, 1_900, 2_000], 300, Some(1_000)),
+            (1_000, 2)
+        );
     }
 
     #[test]
@@ -1346,40 +1674,12 @@ mod tests {
         // Facts for the migration note and the test harness mirror (plus the 8-byte discriminator).
         assert_eq!(Observation::INIT_SPACE, 42);
         assert_eq!(Registry::INIT_SPACE, 1 + 32 + 32 + 160 + 1 + 1 + 4 + 1 + 64);
-        assert_eq!(
-            Benchmark::INIT_SPACE,
-            1 + 32
-                + 16
-                + 32
-                + 2
-                + 2
-                + 8
-                + 8
-                + 16
-                + 8
-                + 2
-                + 8
-                + 8
-                + 1
-                + 8
-                + 1
-                + 2
-                + 8
-                + 2
-                + 8
-                + 2
-                + 8
-                + 1
-                + 1
-                + 1
-                + 42 * 5
-                + 4
-                + 4
-                + 4
-                + FIXING_BYTES
-                + 8
-                + 8
-                + 12
-        );
+        assert_eq!(Benchmark::INIT_SPACE, 2_484);
+        // The declared space is the serialised size: a boxed ring serialises as the array it holds.
+        let mut bytes = Vec::new();
+        blank().serialize(&mut bytes).unwrap();
+        assert_eq!(bytes.len(), Benchmark::INIT_SPACE);
+        let back = Benchmark::deserialize(&mut bytes.as_slice()).unwrap();
+        assert_eq!(*back.fixings, [0u8; FIXING_BYTES]);
     }
 }

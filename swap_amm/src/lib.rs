@@ -69,6 +69,10 @@ pub mod swap_amm {
     ) -> Result<()> {
         instructions::admin::queue_calibration(ctx, params)
     }
+    /// Withdraws a queued calibration that has not yet taken effect; a due one is installed instead.
+    pub fn admin_cancel_calibration(ctx: Context<AdminQueueCalibration>) -> Result<()> {
+        instructions::admin::cancel_calibration(ctx)
+    }
     /// Creates a pool for a benchmark, with its share mint, vault and optional hook set.
     pub fn admin_create_pool(ctx: Context<AdminCreatePool>, args: CreatePoolArgs) -> Result<()> {
         instructions::admin::create_pool(ctx, args)
@@ -77,12 +81,20 @@ pub mod swap_amm {
     // ----- liquidity -----
 
     /// LP deposits USDC and receives pool shares at the current share price.
-    pub fn lp_deposit(ctx: Context<LpDeposit>, amount: u64, min_shares: u64) -> Result<()> {
+    pub fn lp_deposit<'info>(
+        ctx: Context<'info, LpDeposit<'info>>,
+        amount: u64,
+        min_shares: u64,
+    ) -> Result<()> {
         instructions::liquidity::deposit(ctx, amount, min_shares)
     }
     /// LP burns shares for USDC, paying the exit fee while swaps are open. Serves only inside the withdraw
     /// utilisation limit; beyond it fails with `UseWithdrawQueue`.
-    pub fn lp_withdraw(ctx: Context<LpWithdraw>, shares: u64, min_amount: u64) -> Result<()> {
+    pub fn lp_withdraw<'info>(
+        ctx: Context<'info, LpWithdraw<'info>>,
+        shares: u64,
+        min_amount: u64,
+    ) -> Result<()> {
         instructions::liquidity::withdraw(ctx, shares, min_amount)
     }
 
@@ -105,12 +117,14 @@ pub mod swap_amm {
         instructions::queue::dequeue(ctx)
     }
     /// Permissionless crank: closes the open epoch, fills it pro rata up to the capacity the caps leave.
-    pub fn crank_process_withdrawals(ctx: Context<CrankProcessWithdrawals>) -> Result<()> {
+    pub fn crank_process_withdrawals<'info>(
+        ctx: Context<'info, CrankProcessWithdrawals<'info>>,
+    ) -> Result<()> {
         instructions::queue::process(ctx)
     }
     /// Permissionless: pays a processed request to the destinations recorded at enqueue and returns its
     /// unfilled shares.
-    pub fn lp_claim_withdrawal(ctx: Context<LpClaimWithdrawal>) -> Result<()> {
+    pub fn lp_claim_withdrawal<'info>(ctx: Context<'info, LpClaimWithdrawal<'info>>) -> Result<()> {
         instructions::queue::claim(ctx)
     }
 
@@ -118,7 +132,10 @@ pub mod swap_amm {
 
     /// Trader opens a fixed-for-floating swap. The fixed rate is quoted in this slot and must be within
     /// `limit_rate_bp` or the instruction fails (the AMM equivalent of slippage protection).
-    pub fn trader_open_swap(ctx: Context<TraderOpenSwap>, args: OpenSwapArgs) -> Result<()> {
+    pub fn trader_open_swap<'info>(
+        ctx: Context<'info, TraderOpenSwap<'info>>,
+        args: OpenSwapArgs,
+    ) -> Result<()> {
         instructions::swap::open(ctx, args)
     }
     /// Trader cancels early at the then-current opposite-leg quote; the difference settles against collateral.
@@ -153,8 +170,8 @@ pub mod swap_amm {
     }
     /// Trader opens a basis swap: two linked legs, pay-fixed on pool A and receive-fixed on pool B, same tenor
     /// and notional, each collateralised in its own pool, in one transaction.
-    pub fn trader_open_basis_swap(
-        ctx: Context<TraderOpenBasisSwap>,
+    pub fn trader_open_basis_swap<'info>(
+        ctx: Context<'info, TraderOpenBasisSwap<'info>>,
         args: OpenBasisSwapArgs,
     ) -> Result<()> {
         instructions::basis::open_basis_swap(ctx, args)
@@ -168,8 +185,8 @@ pub mod swap_amm {
     }
     /// Trader opens a forward-starting swap: a fixed rate agreed now on the Vernier forward curve for a swap
     /// whose floating accrual begins 28, 60 or 90 days ahead.
-    pub fn trader_open_forward_swap(
-        ctx: Context<TraderOpenForwardSwap>,
+    pub fn trader_open_forward_swap<'info>(
+        ctx: Context<'info, TraderOpenForwardSwap<'info>>,
         args: OpenForwardSwapArgs,
     ) -> Result<()> {
         instructions::forward::open_forward_swap(ctx, args)
@@ -190,5 +207,24 @@ pub mod swap_amm {
     /// escrow and the treasury.
     pub fn sweep_fees(ctx: Context<SweepFees>) -> Result<()> {
         instructions::fees::sweep(ctx)
+    }
+
+    // ----- Stacked Treasuries reserve: idle LP capital at a Treasury-benchmark venue -----
+
+    /// Gives a pool a reserve: a venue on the pool's USDC whose receipts the pool PDA holds. Authority only.
+    pub fn admin_enable_reserve(
+        ctx: Context<AdminEnableReserve>,
+        args: EnableReserveArgs,
+    ) -> Result<()> {
+        instructions::reserve::enable_reserve(ctx, args)
+    }
+    /// Recalibrates or pauses a pool's reserve. Pausing stops placements; recalls and harvests continue.
+    pub fn admin_set_reserve(ctx: Context<AdminSetReserve>, args: SetReserveArgs) -> Result<()> {
+        instructions::reserve::set_reserve(ctx, args)
+    }
+    /// Permissionless: realises accrued yield into LP capital, then places the excess over the working band
+    /// or recalls the shortfall under it. The bounty comes from harvested yield only.
+    pub fn crank_rebalance_reserve(ctx: Context<CrankRebalanceReserve>) -> Result<()> {
+        instructions::reserve::rebalance_reserve(ctx)
     }
 }

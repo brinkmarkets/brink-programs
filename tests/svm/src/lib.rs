@@ -170,7 +170,9 @@ pub struct Pool {
     pub share_supply: u64,
     pub queued_shares: u64,
     pub queue_first_slot: u64,
-    pub _reserved: [u8; 24],
+    pub reserve_placed: u64,
+    pub reserve_active: u8,
+    pub _reserved: [u8; 15],
 }
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BookSide {
@@ -294,7 +296,8 @@ pub struct Benchmark {
     pub fixings: [u8; FIXING_BYTES],
     pub ema_slot: u64,
     pub accepted_slot: u64,
-    pub _reserved: [u8; 12],
+    pub support_lost: bool,
+    pub _reserved: [u8; 11],
 }
 impl Benchmark {
     /// Cumulative accrual at 00:00 UTC of UTC day `day` (`accrual_e18` units); 0 when never written.
@@ -375,6 +378,23 @@ pub enum OperationKind {
         accounts_hash: [u8; 32],
         data_hash: [u8; 32],
     },
+}
+/// Mirror of `brink_timelock::InvokeMeta`: one disclosed account of a queued invoke.
+#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvokeMeta {
+    pub pubkey: Pubkey,
+    pub is_signer: bool,
+    pub is_writable: bool,
+}
+pub fn invoke_metas(metas: &[(Pubkey, bool, bool)]) -> Vec<InvokeMeta> {
+    metas
+        .iter()
+        .map(|(k, s, w)| InvokeMeta {
+            pubkey: *k,
+            is_signer: *s,
+            is_writable: *w,
+        })
+        .collect()
 }
 /// Mirror of `brink_timelock::invoke_accounts_hash`: sha256 over the program id then `key || signer || writable`
 /// for each account meta.
@@ -521,6 +541,11 @@ pub const IX_NAMES: &[&str] = &[
     "trader_cancel_basis_swap",
     "sync_vault",
     "sweep_fees",
+    "trader_open_forward_swap",
+    "crank_start_forward",
+    "admin_enable_reserve",
+    "admin_set_reserve",
+    "crank_rebalance_reserve",
     "initialise",
     "create_benchmark",
     "publish",
@@ -530,7 +555,10 @@ pub const IX_NAMES: &[&str] = &[
     "set_guardian",
     "set_authority",
     "queue",
+    "queue_upgrade",
+    "queue_invoke",
     "cancel",
+    "cancel_upgrade",
     "execute_upgrade",
     "execute_set_upgrade_authority",
     "execute_invoke",
@@ -571,3 +599,4 @@ pub fn record_cu(name: &str, cu: u64) {
     }
 }
 pub mod harness;
+pub mod products;

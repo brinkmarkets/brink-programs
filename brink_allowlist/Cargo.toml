@@ -1,0 +1,28 @@
+[package]
+name = "brink_allowlist"
+version = "0.1.0"
+description = "Brink permissioned pools: an allow-list hook for the swap AMM that vetoes opens and deposits from wallets not on a pool's list"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "brink_allowlist"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build", "swap_amm/idl-build"]
+anchor-debug = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = { workspace = true, features = ["event-cpi"] }
+swap_amm = { path = "../swap_amm", features = ["cpi"] }
+
+[lints]
+workspace = true

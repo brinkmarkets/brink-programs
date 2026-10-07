@@ -109,12 +109,14 @@ fn finding_f13_timelock_can_execute_protocol_administration() {
         (proposer.pubkey(), true, true),
         (authority, true, false),
     ];
+    // External scan 2, finding 18: an invoke is queued with its account list and data disclosed; the generic
+    // `queue` refuses the opaque kind.
     let kind = OperationKind::Invoke {
         program: SWAP_AMM,
         accounts_hash: invoke_accounts_hash(&SWAP_AMM, &metas),
         data_hash: sha256(&inner_data),
     };
-    let queue_ix = Instruction {
+    let opaque = Instruction {
         program_id: TIMELOCK,
         accounts: [
             vec![rw(timelock), sigw(proposer.pubkey()), rw(op(0)), ro(SYSTEM)],
@@ -123,11 +125,30 @@ fn finding_f13_timelock_can_execute_protocol_administration() {
         .concat(),
         data: data("queue", &kind),
     };
+    e.must_fail(&[opaque], &[&proposer], "Undisclosed");
+    let queue_ix = Instruction {
+        program_id: TIMELOCK,
+        accounts: [
+            vec![
+                rw(timelock),
+                sigw(proposer.pubkey()),
+                rw(op(0)),
+                ro(authority),
+                ro(SWAP_AMM),
+                ro(SYSTEM),
+            ],
+            evt(TIMELOCK).to_vec(),
+        ]
+        .concat(),
+        data: data("queue_invoke", &(invoke_metas(&metas), inner_data.clone())),
+    };
     let r = e.send(&[queue_ix], &[&proposer]);
     assert!(
         r.is_ok(),
         "queueing a timelocked invoke must be accepted: {r:?}"
     );
+    let o: Operation = e.acct("Operation", &op(0));
+    assert_eq!(o.kind, kind, "the program hashes what was disclosed");
     e.warp(432_000, 432_000 / 2);
     let exec_ix = Instruction {
         program_id: TIMELOCK,
@@ -165,19 +186,21 @@ fn finding_f13_timelock_can_execute_protocol_administration() {
         (event_authority(&SWAP_AMM), false, false),
         (SWAP_AMM, false, false),
     ];
-    let kind = OperationKind::Invoke {
-        program: SWAP_AMM,
-        accounts_hash: invoke_accounts_hash(&SWAP_AMM, &metas),
-        data_hash: sha256(&inner_data),
-    };
     let queue_ix = Instruction {
         program_id: TIMELOCK,
         accounts: [
-            vec![rw(timelock), sigw(proposer.pubkey()), rw(op(1)), ro(SYSTEM)],
+            vec![
+                rw(timelock),
+                sigw(proposer.pubkey()),
+                rw(op(1)),
+                ro(authority),
+                ro(SWAP_AMM),
+                ro(SYSTEM),
+            ],
             evt(TIMELOCK).to_vec(),
         ]
         .concat(),
-        data: data("queue", &kind),
+        data: data("queue_invoke", &(invoke_metas(&metas), inner_data.clone())),
     };
     e.must(&[queue_ix], &[&proposer]);
     e.warp(432_000, 432_000 / 2);
@@ -309,7 +332,12 @@ fn finding_f15_lp_cannot_exit_at_par_while_the_book_is_a_liability() {
     e.warp(30 * 216_000, 30 * DAY);
     e.publish(900).unwrap();
     let p: Pool = e.acct("Pool", &e.pool);
-    let shares = e.token_amount(&ata(&lp.pubkey(), &e.share_mint)) / 10;
+    // A tenth of the shares would take the pay leg past the 42 % per-leg immediate limit (external scan 2,
+    // finding 11) and is pointed at the queue; a twenty-fifth goes through at once.
+    let tenth = e.token_amount(&ata(&lp.pubkey(), &e.share_mint)) / 10;
+    let ix = e.withdraw_ix(&lp.pubkey(), tenth, 0);
+    e.must_fail(&[ix], &[&lp], "UseWithdrawQueue");
+    let shares = e.token_amount(&ata(&lp.pubkey(), &e.share_mint)) / 25;
     let supply = e.mint_supply(&e.share_mint);
     let par = u128::from(shares) * (u128::from(p.tvl) + 1) / (u128::from(supply) + 1_000_000);
     let before = e.token_amount(&ata(&lp.pubkey(), &USDC_DEVNET));
@@ -317,7 +345,8 @@ fn finding_f15_lp_cannot_exit_at_par_while_the_book_is_a_liability() {
     e.must(&[ix], &[&lp]);
     let got = u128::from(e.token_amount(&ata(&lp.pubkey(), &USDC_DEVNET)) - before);
     // The exit fee scales with utilisation (M-16): the bound is par less the scaled fee.
-    let util_bp = (u128::from(p.open_pay_notional + p.open_rec_notional) * 10_000).div_ceil(u128::from(p.tvl));
+    let util_bp = (u128::from(p.open_pay_notional + p.open_rec_notional) * 10_000)
+        .div_ceil(u128::from(p.tvl));
     let fee = par * 50 * util_bp / 100_000_000;
     assert!(
         got < par - fee,
@@ -424,23 +453,35 @@ fn finding_f18_timelock_can_upgrade_itself_through_execute_upgrade() {
             },
         )
         .unwrap();
-    let kind = OperationKind::Upgrade {
-        program: TIMELOCK,
-        buffer,
-        buffer_hash: sha256(&elf),
-    };
     let op = pda(&[b"op", &0u64.to_le_bytes()], &TIMELOCK);
     e.must(
         &[Instruction {
             program_id: TIMELOCK,
             accounts: [
-                vec![rw(timelock), sigw(proposer.pubkey()), rw(op), ro(SYSTEM)],
+                vec![
+                    rw(timelock),
+                    sigw(proposer.pubkey()),
+                    rw(op),
+                    ro(authority),
+                    ro(TIMELOCK),
+                    ro(buffer),
+                    ro(SYSTEM),
+                ],
                 evt(TIMELOCK).to_vec(),
             ]
             .concat(),
-            data: data("queue", &kind),
+            data: data("queue_upgrade", &()),
         }],
         &[&proposer],
+    );
+    let o: Operation = e.acct("Operation", &op);
+    assert_eq!(
+        o.kind,
+        OperationKind::Upgrade {
+            program: TIMELOCK,
+            buffer,
+            buffer_hash: sha256(&elf),
+        }
     );
     e.warp(432_000, 432_000 / 2);
     let rent = Pubkey::from_str_const("SysvarRent111111111111111111111111111111111");
@@ -474,6 +515,151 @@ fn finding_f18_timelock_can_upgrade_itself_through_execute_upgrade() {
     );
     let o: Operation = e.acct("Operation", &op);
     assert_eq!(o.state, OperationState::Executed);
+}
+
+/// External scan 2, finding 18. Invariant: an upgrade is queued with its buffer disclosed and frozen: the buffer
+/// must already belong to the timelock's authority PDA, so nobody can rewrite it after review, and its hash is
+/// taken by the program rather than supplied. The generic `queue` refuses an opaque `Upgrade`. A cancelled upgrade
+/// closes the buffer back to the proposer that paid for it.
+#[test]
+fn scan2_f18_upgrades_are_queued_disclosed_and_cancel_returns_the_buffer() {
+    let mut e = setup();
+    let proposer = e.authority.insecure_clone();
+    let executor = e.lp.insecure_clone();
+    let guardian = e.guardian.insecure_clone();
+    let timelock = pda(&[b"timelock"], &TIMELOCK);
+    let authority = pda(&[b"authority"], &TIMELOCK);
+    let payer = e.payer.pubkey();
+    e.must(
+        &[Instruction {
+            program_id: TIMELOCK,
+            accounts: vec![
+                rw(timelock),
+                ro(authority),
+                sigw(payer),
+                ro(program_data(&TIMELOCK)),
+                ro(SYSTEM),
+            ],
+            data: data(
+                "initialise",
+                &(
+                    proposer.pubkey(),
+                    executor.pubkey(),
+                    guardian.pubkey(),
+                    432_000u64,
+                ),
+            ),
+        }],
+        &[],
+    );
+    let elf = vec![7u8; 4_096];
+    let mut buffer_with = |owner: &Pubkey| -> (Pubkey, u64) {
+        let mut buf = vec![0u8; 37 + elf.len()];
+        buf[0] = 1;
+        buf[4] = 1;
+        buf[5..37].copy_from_slice(owner.as_ref());
+        buf[37..].copy_from_slice(&elf);
+        let buffer = Pubkey::new_unique();
+        let lamports = e.svm.minimum_balance_for_rent_exemption(buf.len());
+        e.svm
+            .set_account(
+                buffer,
+                Account {
+                    lamports,
+                    data: buf,
+                    owner: LOADER,
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            )
+            .unwrap();
+        (buffer, lamports)
+    };
+    let (held_by_proposer, _) = buffer_with(&proposer.pubkey());
+    let (held_by_pda, buffer_lamports) = buffer_with(&authority);
+    let op = |n: u64| pda(&[b"op", &n.to_le_bytes()], &TIMELOCK);
+    let queue_upgrade = |op: Pubkey, buffer: Pubkey| Instruction {
+        program_id: TIMELOCK,
+        accounts: [
+            vec![
+                rw(timelock),
+                sigw(proposer.pubkey()),
+                rw(op),
+                ro(authority),
+                ro(SWAP_AMM),
+                ro(buffer),
+                ro(SYSTEM),
+            ],
+            evt(TIMELOCK).to_vec(),
+        ]
+        .concat(),
+        data: data("queue_upgrade", &()),
+    };
+    // Opaque kinds are refused by the generic queue, whoever computed the hash.
+    let opaque = Instruction {
+        program_id: TIMELOCK,
+        accounts: [
+            vec![rw(timelock), sigw(proposer.pubkey()), rw(op(0)), ro(SYSTEM)],
+            evt(TIMELOCK).to_vec(),
+        ]
+        .concat(),
+        data: data(
+            "queue",
+            &OperationKind::Upgrade {
+                program: SWAP_AMM,
+                buffer: held_by_pda,
+                buffer_hash: sha256(&elf),
+            },
+        ),
+    };
+    e.must_fail(&[opaque], &[&proposer], "Undisclosed");
+    // A buffer the proposer could still rewrite is not accepted.
+    e.must_fail(
+        &[queue_upgrade(op(0), held_by_proposer)],
+        &[&proposer],
+        "BufferAuthority",
+    );
+    // A buffer owned by the PDA is: the program records the hash it computed.
+    e.must(&[queue_upgrade(op(0), held_by_pda)], &[&proposer]);
+    let o: Operation = e.acct("Operation", &op(0));
+    assert_eq!(
+        o.kind,
+        OperationKind::Upgrade {
+            program: SWAP_AMM,
+            buffer: held_by_pda,
+            buffer_hash: sha256(&elf),
+        }
+    );
+    // The guardian cancels; the buffer's lamports return to the proposer and both accounts are gone.
+    let before = e.svm.get_balance(&proposer.pubkey()).unwrap();
+    let cancel = Instruction {
+        program_id: TIMELOCK,
+        accounts: [
+            vec![
+                ro(timelock),
+                sig(guardian.pubkey()),
+                rw(proposer.pubkey()),
+                rw(op(0)),
+                ro(authority),
+                rw(held_by_pda),
+                ro(LOADER),
+            ],
+            evt(TIMELOCK).to_vec(),
+        ]
+        .concat(),
+        data: data("cancel_upgrade", &()),
+    };
+    e.must(&[cancel], &[&guardian]);
+    let after = e.svm.get_balance(&proposer.pubkey()).unwrap();
+    assert!(
+        after >= before + buffer_lamports,
+        "buffer rent came back: {before} -> {after} (+{buffer_lamports})"
+    );
+    assert!(e
+        .svm
+        .get_account(&held_by_pda)
+        .is_none_or(|a| a.data.is_empty() && a.lamports == 0));
+    assert!(e.svm.get_account(&op(0)).is_none_or(|a| a.data.is_empty()));
 }
 
 /// F-31 / ADR-009. Invariant: a withdrawal that would push utilisation above the immediate limit is not
@@ -938,7 +1124,11 @@ fn scan1_m18_eligible_withdrawal_epoch_has_priority_over_new_exposure() {
     let q: WithdrawQueue = e.acct("WithdrawQueue", &e.queue_pda());
     let p: Pool = e.acct("Pool", &e.pool);
     assert_eq!(p.queued_shares, q.queued_shares, "pool mirrors the queue");
-    assert_eq!(p.share_supply, e.mint_supply(&e.share_mint), "pool mirrors the mint");
+    assert_eq!(
+        p.share_supply,
+        e.mint_supply(&e.share_mint),
+        "pool mirrors the mint"
+    );
 }
 
 /// External scan 1, M-8. Invariant: a trader's cancel carries a minimum payout that the program enforces on the
@@ -948,7 +1138,13 @@ fn scan1_m8_cancel_enforces_min_payout() {
     let mut e = seeded();
     let tr = e.trader.insecure_clone();
     open_default(&mut e, 1);
-    let ix = e.close_ix("trader_cancel_swap", &tr.pubkey(), 1, &tr.pubkey(), &u64::MAX);
+    let ix = e.close_ix(
+        "trader_cancel_swap",
+        &tr.pubkey(),
+        1,
+        &tr.pubkey(),
+        &u64::MAX,
+    );
     e.must_fail(&[ix], &[&tr], "Slippage");
     let ix = e.close_ix("trader_cancel_swap", &tr.pubkey(), 1, &tr.pubkey(), &0u64);
     e.must(&[ix], &[&tr]);
@@ -977,7 +1173,11 @@ fn scan1_h1_claim_pays_only_accounts_the_lp_owns() {
     e.must(&[e.process_ix()], &[]);
     let stranger = e.new_actor(USDC, false);
     let ix = e.claim_ix(&lp.pubkey(), 1, &lp.pubkey());
-    let ix = Env::substitute(&ix, ata(&lp.pubkey(), &USDC_DEVNET), ata(&stranger.pubkey(), &USDC_DEVNET));
+    let ix = Env::substitute(
+        &ix,
+        ata(&lp.pubkey(), &USDC_DEVNET),
+        ata(&stranger.pubkey(), &USDC_DEVNET),
+    );
     let err = e
         .send(&[ix], &[&lp])
         .expect_err("a claim must not pay a token account the LP does not own");

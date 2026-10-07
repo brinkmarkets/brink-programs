@@ -80,162 +80,17 @@ fn benchmark_for_exit(b: &Benchmark, now_slot: u64) -> Result<(u16, u16)> {
     }
 }
 
-/// Oldest point of benchmark history still held on chain: the oldest daily fixing in the ring, or the start of
-/// the latest segment when no fixing has been recorded. Used by `settle` when a maturity has fallen out of the
-/// ring (M-3).
+pub use brink_index::FixingKind;
+
+/// Oldest point of benchmark history still held on chain; see `brink_index::oldest_known`.
 pub fn oldest_known(b: &Benchmark) -> Result<(i64, u128)> {
-    if b.fixing_first_day != 0 {
-        let oldest_day = b.fixing_first_day.max(
-            b.fixing_head_day
-                .saturating_sub(brink_index::FIXING_DAYS.saturating_sub(1)),
-        );
-        if let Some(f) = b.fixing(oldest_day) {
-            return Ok((Benchmark::day_start(oldest_day)?, f));
-        }
-    }
-    let seg_len = b
-        .unix_ts
-        .checked_sub(b.prev_unix_ts)
-        .ok_or(BrinkError::Overflow)?
-        .max(0);
-    let seg_start = b
-        .accrual_e18
-        .checked_sub(rate_over(b.prev_value_bp, seg_len)?)
-        .ok_or(BrinkError::Overflow)?;
-    Ok((b.prev_unix_ts, seg_start))
+    brink_index::oldest_known(b).map_err(|_| BrinkError::Overflow.into())
 }
 
-/// Accrual at maturity for a swap whose maturity fixing has been evicted from the ring (M-3): the average rate the
-/// benchmark realised from the swap's open to the oldest point still on chain, applied over the swap's term.
-/// The estimate is drawn from history that contains the whole term, never extrapolated backwards from the
-/// latest segment, so a later publication cannot fabricate a gain or push the maturity accrual below the opening
-/// accrual: the close is never refused. Flagged `Fallback` in `SwapClosed`.
-pub fn fallback_maturity_accrual(
-    b: &Benchmark,
-    opened_ts: i64,
-    matures_ts: i64,
-    accrual_start: u128,
-) -> Result<u128> {
-    let (oldest_ts, oldest_accrual) = oldest_known(b)?;
-    let span = oldest_ts
-        .checked_sub(opened_ts)
-        .ok_or(BrinkError::Overflow)?;
-    let term = matures_ts
-        .checked_sub(opened_ts)
-        .ok_or(BrinkError::Overflow)?;
-    if span <= 0 || term <= 0 {
-        return Ok(accrual_start);
-    }
-    let realised = oldest_accrual.saturating_sub(accrual_start);
-    let scaled = realised
-        .checked_mul(u128::try_from(term.min(span)).map_err(|_| BrinkError::Overflow)?)
-        .ok_or(BrinkError::Overflow)?
-        .checked_div(u128::try_from(span).map_err(|_| BrinkError::Overflow)?)
-        .ok_or(BrinkError::Overflow)?;
-    accrual_start
-        .checked_add(scaled)
-        .ok_or(BrinkError::Overflow.into())
-}
-
-/// How the cumulative accrual at an instant was obtained (ADR-017 item 1.2). Emitted in `SwapClosed.fixing_kind`
-/// so indexers can count settlements that used anything other than an exact reading.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(u8)]
-pub enum FixingKind {
-    /// At or after the latest publish: last value held flat (exact between publications).
-    Live = 0,
-    /// Inside the latest segment: that segment's value removed pro rata (exact; maths patch 0002).
-    Segment = 1,
-    /// A midnight whose daily fixing is in the benchmark's ring (exact).
-    Fixing = 2,
-    /// Inside a day whose fixing is in the ring: linear between the day's fixing and the next known point (exact
-    /// when the rate was flat over the day; otherwise deterministic, bounded by the intra-day rate change).
-    Interpolated = 3,
-    /// Older than the ring: the earliest known point extrapolated backwards flat at the previous value
-    /// (deterministic given the state; flagged).
-    Fallback = 4,
-}
-
-fn rate_over(bp: u16, secs: i64) -> Result<u128> {
-    u128::from(bp)
-        .checked_mul(u128::try_from(secs).map_err(|_| BrinkError::Overflow)?)
-        .and_then(|x| x.checked_mul(brink_index::ACCRUAL_SCALE))
-        .ok_or(BrinkError::Overflow.into())
-}
-
-/// Cumulative accrual at `t`, total over every `t` not before 1970: a settlement is never refused for lack of
-/// history (audit F-34, review F-12, maths M-2, simulation S-3). Forward of the last publish the last value is
-/// held flat; inside the latest segment the segment's value is removed pro rata; before that the daily fixings
-/// ring written by `publish` answers (ADR-006 as amended by ADR-017).
+/// Cumulative accrual at `t`, total over every `t` not before 1970; the shared reader lives in
+/// `brink_index::accrual` so the venue and the split program read the same number for the same instant.
 pub fn accrual_lookup(b: &Benchmark, t: i64) -> Result<(u128, FixingKind)> {
-    if t >= b.unix_ts {
-        let a = b
-            .accrual_e18
-            .checked_add(rate_over(
-                b.value_bp,
-                t.checked_sub(b.unix_ts).ok_or(BrinkError::Overflow)?,
-            )?)
-            .ok_or(BrinkError::Overflow)?;
-        return Ok((a, FixingKind::Live));
-    }
-    // Accrual at the start of the latest segment.
-    let seg_len = b
-        .unix_ts
-        .checked_sub(b.prev_unix_ts)
-        .ok_or(BrinkError::Overflow)?
-        .max(0);
-    let seg_start = b
-        .accrual_e18
-        .checked_sub(rate_over(b.prev_value_bp, seg_len)?)
-        .ok_or(BrinkError::Overflow)?;
-    if t >= b.prev_unix_ts {
-        let a = seg_start
-            .checked_add(rate_over(
-                b.prev_value_bp,
-                t.checked_sub(b.prev_unix_ts).ok_or(BrinkError::Overflow)?,
-            )?)
-            .ok_or(BrinkError::Overflow)?;
-        return Ok((a, FixingKind::Segment));
-    }
-    // Before the latest segment: daily fixings.
-    let day = Benchmark::day_of(t)?;
-    let day_start = Benchmark::day_start(day)?;
-    let next_start = day_start
-        .checked_add(brink_index::SECONDS_PER_DAY)
-        .ok_or(BrinkError::Overflow)?;
-    // Nearest known point after `t`: the next day's fixing when the ring holds it, else the segment start.
-    let right = match b.fixing(day.checked_add(1).ok_or(BrinkError::Overflow)?) {
-        Some(f) if next_start <= b.prev_unix_ts => (next_start, f),
-        _ => (b.prev_unix_ts, seg_start),
-    };
-    match b.fixing(day) {
-        Some(f0) if t == day_start => Ok((f0, FixingKind::Fixing)),
-        Some(f0) if right.1 >= f0 => {
-            let span = u128::try_from(right.0.checked_sub(day_start).ok_or(BrinkError::Overflow)?)
-                .map_err(|_| BrinkError::Overflow)?;
-            let frac = u128::try_from(t.checked_sub(day_start).ok_or(BrinkError::Overflow)?)
-                .map_err(|_| BrinkError::Overflow)?;
-            let delta = right
-                .1
-                .checked_sub(f0)
-                .ok_or(BrinkError::Overflow)?
-                .checked_mul(frac)
-                .ok_or(BrinkError::Overflow)?
-                .checked_div(span)
-                .ok_or(BrinkError::Overflow)?;
-            Ok((
-                f0.checked_add(delta).ok_or(BrinkError::Overflow)?,
-                FixingKind::Interpolated,
-            ))
-        }
-        _ => {
-            let back = rate_over(
-                b.prev_value_bp,
-                right.0.checked_sub(t).ok_or(BrinkError::Overflow)?,
-            )?;
-            Ok((right.1.saturating_sub(back), FixingKind::Fallback))
-        }
-    }
+    brink_index::accrual_lookup(b, t).map_err(|_| BrinkError::Overflow.into())
 }
 
 /// Cumulative accrual at `now`; see `accrual_lookup`.
@@ -298,7 +153,15 @@ fn quote_with_start(
     match pool.pricer {
         Pricer::Vernier => {
             let q = if start_days == 0 {
-                vernier::quote(spot, ema, tenor, leg, notional, &pool.vernier_pool(), &params)
+                vernier::quote(
+                    spot,
+                    ema,
+                    tenor,
+                    leg,
+                    notional,
+                    &pool.vernier_pool(),
+                    &params,
+                )
             } else {
                 vernier::quote_forward(
                     spot,
@@ -317,19 +180,23 @@ fn quote_with_start(
     }
 }
 
-/// Whole days from `now` to a forward's start, rounded up; zero once the start has passed. The unwind of a
-/// forward before its start is priced on the curve at this offset.
-pub fn days_to_start(now: i64, start_ts: i64) -> Result<u16> {
+/// Whole days from `now` to a forward's start, rounded down and capped so that start plus tenor stays inside
+/// the quoted curve; zero once the start has passed. The unwind of a forward before its start is priced on the
+/// curve at this offset. The start itself was rounded up to a UTC midnight at open, so a 90-day forward sits
+/// between 90 and 91 days away until the next midnight; rounding the offset up as well asked the curve for 91
+/// plus a 90-day tenor, past the horizon, and refused every exit of that combination for up to a day (external
+/// scan 2, finding 14). Rounding down and capping keeps the offset within the horizon the open was checked
+/// against, and the fraction of a day it drops is worth at most one day of the curve's slope.
+pub fn days_to_start(now: i64, start_ts: i64, tenor: vernier::Tenor) -> Result<u16> {
     let secs = start_ts.checked_sub(now).ok_or(BrinkError::Overflow)?;
     if secs <= 0 {
         return Ok(0);
     }
     let days = secs
-        .checked_add(SECONDS_PER_DAY - 1)
-        .ok_or(BrinkError::Overflow)?
         .checked_div(SECONDS_PER_DAY)
         .ok_or(BrinkError::Overflow)?;
-    u16::try_from(days).map_err(|_| BrinkError::Overflow.into())
+    let days = u16::try_from(days).map_err(|_| BrinkError::Overflow)?;
+    Ok(days.min(vernier::FORWARD_HORIZON_DAYS.saturating_sub(tenor.days())))
 }
 
 /// The unwind rate for an exit mark. `Mid` carries no demand term, so the figure cannot be moved by another
@@ -342,16 +209,28 @@ pub enum Unwind {
     Mid,
 }
 
+/// The terms an unwind is priced on: the swap's own start, tenor, leg and notional.
+#[derive(Clone, Copy)]
+pub struct UnwindTerms {
+    pub start_days: u16,
+    pub tenor: vernier::Tenor,
+    pub leg: vernier::Leg,
+    pub notional: u64,
+}
+
 fn unwind_rate(
     pool: &Pool,
     b: &Benchmark,
     slot: u64,
-    start_days: u16,
-    tenor: vernier::Tenor,
-    leg: vernier::Leg,
-    notional: u64,
+    terms: UnwindTerms,
     how: Unwind,
 ) -> Result<i32> {
+    let UnwindTerms {
+        start_days,
+        tenor,
+        leg,
+        notional,
+    } = terms;
     let (spot, ema) = benchmark_for_exit(b, slot)?;
     match how {
         Unwind::Quoted => quote_with_start(pool, spot, ema, start_days, tenor, leg, notional),
@@ -441,6 +320,10 @@ pub(crate) struct OpenLeg<'a, 'info> {
     pub swap_bump: u8,
     pub vault: &'a mut InterfaceAccount<'info, TokenAccount>,
     pub hook_program: Option<&'a UncheckedAccount<'info>>,
+    /// Read-only accounts the caller passes through to the hook (the instruction's remaining accounts), so a
+    /// hook can consult its own state, for example an allow-list entry for the actor. Never signers, never
+    /// writable: the hook observes and vetoes, it does not move funds.
+    pub hook_accounts: &'a [AccountInfo<'info>],
 }
 
 /// How a leg is priced: the ordinary quote against its own pool in this slot, or a fixed rate the caller has
@@ -521,7 +404,7 @@ pub(crate) fn open_leg<'info>(
         leg.hook_program,
         Point::BeforeOpen,
         &payload,
-        &[],
+        leg.hook_accounts,
     )?;
 
     let tenor = tenor_from(a.tenor)?;
@@ -530,10 +413,7 @@ pub(crate) fn open_leg<'info>(
     require!(pool.tvl > 0, BrinkError::PoolInvariant);
     // Capacity before price (maths finding M-14): a trade the caps refuse is reported as `LegCap`, whatever
     // the pricing library would have said about it.
-    require!(
-        a.notional <= vernier::leg_capacity(&pool.vernier_pool(), vleg),
-        BrinkError::LegCap
-    );
+    require!(a.notional <= pool.leg_capacity(vleg), BrinkError::LegCap);
     // An eligible withdrawal epoch has first call on the capacity above the caps' capital floor: a new swap may
     // only take what would remain after the queue is served, so opens cannot keep an epoch unserviceable (M-18).
     super::queue::require_queue_priority(pool, vleg, a.notional, clock.slot)?;
@@ -541,7 +421,8 @@ pub(crate) fn open_leg<'info>(
         Pricing::Forward(d) => {
             // The whole life must sit inside the quoted curve and the maturity ladder.
             require!(
-                d.checked_add(tenor.days()).is_some_and(|e| e <= vernier::FORWARD_HORIZON_DAYS),
+                d.checked_add(tenor.days())
+                    .is_some_and(|e| e <= vernier::FORWARD_HORIZON_DAYS),
                 BrinkError::ForwardHorizon
             );
             d
@@ -714,14 +595,16 @@ pub(crate) fn open_leg<'info>(
     // The hook observes the booked position, so the swap's bytes are written before the CPI; Anchor would
     // otherwise serialise them only at instruction exit (external scan 1, M-19).
     leg.swap.exit(&crate::ID)?;
-    let swap_info = leg.swap.to_account_info();
+    let mut after = Vec::with_capacity(leg.hook_accounts.len().saturating_add(1));
+    after.push(leg.swap.to_account_info());
+    after.extend(leg.hook_accounts.iter().cloned());
     hooks::call(
         leg.pool,
         sh.global.mode,
         leg.hook_program,
         Point::AfterOpen,
         &payload,
-        &[swap_info],
+        &after,
     )?;
     Ok(Opened {
         fixed_bp: fixed,
@@ -729,7 +612,7 @@ pub(crate) fn open_leg<'info>(
     })
 }
 
-pub fn open(ctx: Context<TraderOpenSwap>, a: OpenSwapArgs) -> Result<()> {
+pub fn open<'info>(ctx: Context<'info, TraderOpenSwap<'info>>, a: OpenSwapArgs) -> Result<()> {
     let clock = Clock::get()?;
     let swap_bump = ctx.bumps.swap;
     let x = &mut *ctx.accounts;
@@ -748,6 +631,7 @@ pub fn open(ctx: Context<TraderOpenSwap>, a: OpenSwapArgs) -> Result<()> {
         swap_bump,
         vault: &mut x.vault,
         hook_program: x.hook_program.as_ref(),
+        hook_accounts: ctx.remaining_accounts,
     };
     open_leg(&sh, &mut leg, &a, &clock, Pricing::Quote, None)?;
     leg.vault.reload()?;
@@ -913,6 +797,10 @@ pub(crate) fn close_leg<'info>(
     let bump = pool.bump;
     let seeds: &[&[u8]] = &[b"pool", benchmark.as_ref(), &[bump]];
     let decimals = sh.usdc_mint.decimals;
+    leg.pool.require_working(
+        leg.vault.amount,
+        payout.checked_add(bounty).ok_or(BrinkError::Overflow)?,
+    )?;
     if payout > 0 {
         transfer_checked(
             CpiContext::new_with_signer(
@@ -1049,11 +937,19 @@ fn mark(
         .checked_sub(now.max(from))
         .ok_or(BrinkError::Overflow)?
         .max(0);
-    let start_days = if s.is_forward() { days_to_start(now, s.start_ts)? } else { 0 };
+    let start_days = if s.is_forward() {
+        days_to_start(now, s.start_ts, tenor)?
+    } else {
+        0
+    };
     let accrued = if elapsed > 0 {
         // `now` is the chain clock, so this reading is always on the live path (exact between publications).
         // A forward whose start crank has not run yet reads its start from the fixings ring here.
-        let start_accrual = if s.is_started() { s.index_accrual_start } else { accrual_at(b, from)? };
+        let start_accrual = if s.is_started() {
+            s.index_accrual_start
+        } else {
+            accrual_at(b, from)?
+        };
         pnl_from_accrual(
             s.leg,
             start_accrual,
@@ -1074,10 +970,12 @@ fn mark(
             pool,
             b,
             slot,
-            start_days,
-            tenor,
-            leg_from(opposite(s.leg)),
-            s.notional,
+            UnwindTerms {
+                start_days,
+                tenor,
+                leg: leg_from(opposite(s.leg)),
+                notional: s.notional,
+            },
             how,
         )?
         .max(0);
@@ -1215,6 +1113,73 @@ fn settle_inner(ctx: Context<CloseSwap>, min_payout: Option<u64>) -> Result<()> 
     settle_leg(&sh, &mut leg, &clock, min_payout).map(|_| ())
 }
 
+/// The two accrual readings a settlement is valued on, and how they were obtained (ADR-017 as amended by
+/// external scan 2, findings 16 and 21).
+///
+/// The start is the stored reading when the start crank ran, else the fixings record at the swap's start; the
+/// end is the fixings record at maturity. Accrual after maturity is never included and the lookups are total, so
+/// a late settlement is never refused (audit F-34). When history has been lost the rule is deterministic and
+/// uses only readings from inside the term, never the latest segment or anything after maturity:
+///
+/// * maturity evicted from the ring: the whole term is older than the oldest retained fixing (fixings are
+///   contiguous), so nothing of the realised history remains and the swap settles flat, floating equal to fixed
+///   (finding 16 closed the earlier estimate, which averaged post-maturity rates);
+/// * start evicted, maturity exact (an unstarted forward left for over 128 days): the average rate realised over
+///   the part of the term still on chain, `[oldest retained fixing, maturity]`, is applied over the whole term
+///   (finding 21 closed the backward extrapolation from the latest segment, which let the rate published most
+///   recently set the start reading);
+/// * both evicted: flat.
+///
+/// Every fallback is reported as `FixingKind::Fallback` in `SwapClosed`. Reaching one requires a matured swap to
+/// stay unsettled for over 128 days while a bounty is on offer to any cranker and the matured position blocks
+/// LP pricing, so it is confined to abandoned pools (M-3, M-5).
+fn settlement_readings(b: &Benchmark, s: &Swap, from: i64) -> Result<(u128, u128, FixingKind)> {
+    let (end, end_kind) = accrual_lookup(b, s.matures_ts)?;
+    let start = if s.is_started() {
+        Some(s.index_accrual_start)
+    } else {
+        match accrual_lookup(b, from)? {
+            (_, FixingKind::Fallback) => None,
+            (a, _) => Some(a),
+        }
+    };
+    let flat = |start_accrual: u128| -> Result<(u128, u128, FixingKind)> {
+        let term = s.matures_ts.checked_sub(from).ok_or(BrinkError::Overflow)?;
+        let fixed_leg =
+            brink_index::rate_over(s.fixed_bp, term).map_err(|_| BrinkError::Overflow)?;
+        Ok((
+            start_accrual,
+            start_accrual
+                .checked_add(fixed_leg)
+                .ok_or(BrinkError::Overflow)?,
+            FixingKind::Fallback,
+        ))
+    };
+    match (start, end_kind) {
+        (Some(a), FixingKind::Fallback) => flat(a),
+        (Some(a), kind) => Ok((a, end, kind)),
+        (None, FixingKind::Fallback) => flat(0),
+        (None, _) => {
+            let (oldest_ts, oldest_accrual) = oldest_known(b)?;
+            let known = s
+                .matures_ts
+                .checked_sub(oldest_ts)
+                .ok_or(BrinkError::Overflow)?;
+            let term = s.matures_ts.checked_sub(from).ok_or(BrinkError::Overflow)?;
+            if known <= 0 || known >= term {
+                return flat(0);
+            }
+            let realised = end.saturating_sub(oldest_accrual);
+            let over_term = realised
+                .checked_mul(u128::try_from(term).map_err(|_| BrinkError::Overflow)?)
+                .ok_or(BrinkError::Overflow)?
+                .checked_div(u128::try_from(known).map_err(|_| BrinkError::Overflow)?)
+                .ok_or(BrinkError::Overflow)?;
+            Ok((end.saturating_sub(over_term), end, FixingKind::Fallback))
+        }
+    }
+}
+
 /// Settlement of one leg on the shared accounts; see `settle`.
 pub(crate) fn settle_leg<'info>(
     sh: &CloseShared<'_, 'info>,
@@ -1227,21 +1192,9 @@ pub(crate) fn settle_leg<'info>(
     require!(clock.unix_timestamp >= s.matures_ts, BrinkError::NotMatured);
     let b = leg.benchmark;
     require!(b.published, BrinkError::BenchmarkNotPublished);
-    // Accrual at maturity from the fixings record; accrual after maturity is never included and the lookup is
-    // total, so a late settlement is never refused (audit F-34). A maturity older than the fixings ring is valued
-    // from the realised average over history that contains the term, never from the latest segment (M-3).
-    // A forward settles over [start, maturity]. If its start crank never ran, the start reading
-    // is taken from the fixings ring here, so a missed crank never blocks a settlement.
     let from = s.accrual_from();
-    let start_accrual = if s.is_started() { s.index_accrual_start } else { accrual_at(b, from)? };
-    let (end, kind) = match accrual_lookup(b, s.matures_ts)? {
-        (_, FixingKind::Fallback) => (
-            fallback_maturity_accrual(b, from, s.matures_ts, start_accrual)?,
-            FixingKind::Fallback,
-        ),
-        other => other,
-    };
     let term = s.matures_ts.checked_sub(from).ok_or(BrinkError::Overflow)?;
+    let (start_accrual, end, kind) = settlement_readings(b, s, from)?;
     let pnl = clamp_to_collateral(
         pnl_from_accrual(s.leg, start_accrual, end, s.fixed_bp, s.notional, term)?,
         s.collateral,
@@ -1306,11 +1259,9 @@ pub fn liquidate(mut ctx: Context<CloseSwap>) -> Result<()> {
     close(&mut ctx, pnl, into, true, FixingKind::Live, None)
 }
 
-
 /// Test fixture shared with sibling modules' tests: an empty pool with default calibration.
 #[cfg(test)]
 pub(crate) fn test_pool() -> Pool {
-
     Pool {
         benchmark: Pubkey::default(),
         share_mint: Pubkey::default(),
@@ -1360,7 +1311,9 @@ pub(crate) fn test_pool() -> Pool {
         queue_first_slot: 0,
         limited_window_start: 0,
         limited_window_notional: 0,
-        _reserved: [0; 24],
+        reserve_placed: 0,
+        reserve_active: 0,
+        _reserved: [0; 15],
     }
 }
 
@@ -1430,10 +1383,11 @@ mod tests {
             ema_milli_bp: 0,
             fixing_first_day: 0,
             fixing_head_day: 0,
-            fixings: [0; brink_index::FIXING_BYTES],
+            fixings: Box::new([0; brink_index::FIXING_BYTES]),
             ema_slot: 0,
             accepted_slot: 0,
-            _reserved: [0; 12],
+            support_lost: false,
+            _reserved: [0; 11],
         }
     }
     /// The accrual part of `brink_index::publish`, for host tests.
@@ -1555,10 +1509,35 @@ mod tests {
         );
     }
 
-    /// External scan 1, M-3: a maturity older than the fixings ring is valued from the realised average over
-    /// history containing the term; later publications cannot turn a loss into a gain or refuse the close.
+    fn spot_swap(t_open: i64, matures: i64, leg: LegKind, fixed_bp: u16, start: u128) -> Swap {
+        Swap {
+            pool: Pubkey::default(),
+            trader: Pubkey::default(),
+            leg,
+            tenor: 0,
+            notional: 100_000_000_000,
+            fixed_bp,
+            collateral: 10_000_000_000,
+            opened_slot: 0,
+            opened_ts: t_open,
+            matures_ts: matures,
+            index_accrual_start: start,
+            client_seed: 0,
+            state: SwapState::Open,
+            bump: 0,
+            limited_window_start: 0,
+            link: Pubkey::default(),
+            link_flags: 0,
+            start_ts: 0,
+            _reserved: [0; 15],
+        }
+    }
+
+    /// External scan 1, M-3, as amended by external scan 2, finding 16: a maturity older than the fixings ring
+    /// has no realised history left on chain (fixings are contiguous), so the swap settles flat whatever was
+    /// published after maturity, and the close is never refused.
     #[test]
-    fn evicted_maturity_settles_from_realised_history_not_the_latest_segment() {
+    fn evicted_maturity_settles_flat_whatever_was_published_later() {
         let mut b = benchmark();
         let t_open = 20_010 * DAY + 9 * 3_600;
         publish(&mut b, t_open - 60, 684);
@@ -1574,36 +1553,152 @@ mod tests {
         publish(&mut b, t, 400);
         publish(&mut b, t + 60, 400);
         assert_eq!(accrual_lookup(&b, matures).unwrap().1, FixingKind::Fallback);
-        let end = fallback_maturity_accrual(&b, t_open, matures, start).unwrap();
-        // Exactly the flat 684 bp over the term, which is what the trader actually realised.
-        assert_eq!(end - start, flat(684, matures - t_open));
-        // A pay-fixed trader at 700 books a small loss, not the 1,000 USDC gain the old extrapolation produced.
-        let pnl = pnl_from_accrual(
-            LegKind::PayFixed,
-            start,
-            end,
-            700,
-            100_000_000_000,
-            matures - t_open,
-        )
-        .unwrap();
-        assert!(pnl < 0 && pnl > -20_000_000, "{pnl}");
-        // Publishing a much higher rate afterwards cannot push the estimate below the opening accrual.
+        let s = spot_swap(t_open, matures, LegKind::PayFixed, 700, start);
+        let (a, e, kind) = settlement_readings(&b, &s, t_open).unwrap();
+        assert_eq!(kind, FixingKind::Fallback);
+        assert_eq!(a, start);
+        // Flat: the floating leg equals the fixed leg over the term, so the settlement is zero.
+        assert_eq!(e - a, flat(700, matures - t_open));
+        assert_eq!(
+            pnl_from_accrual(LegKind::PayFixed, a, e, 700, s.notional, matures - t_open).unwrap(),
+            0
+        );
+        // The earlier estimate averaged rates after maturity: 130 days of 2 000 bp published later would have
+        // moved it. Now nothing published after maturity changes the reading.
         for _ in 0..130 {
             t += DAY;
             publish(&mut b, t + 17, 2_000);
         }
-        let end2 = fallback_maturity_accrual(&b, t_open, matures, start).unwrap();
-        assert!(end2 >= start);
-        assert!(pnl_from_accrual(
-            LegKind::PayFixed,
-            start,
-            end2,
-            700,
-            100_000_000_000,
-            matures - t_open
-        )
-        .is_ok());
+        assert_eq!(
+            settlement_readings(&b, &s, t_open).unwrap(),
+            (a, e, FixingKind::Fallback)
+        );
+        let r = spot_swap(t_open, matures, LegKind::ReceiveFixed, 650, start);
+        let (a2, e2, k2) = settlement_readings(&b, &r, t_open).unwrap();
+        assert_eq!(
+            (k2, e2 - a2),
+            (FixingKind::Fallback, flat(650, matures - t_open))
+        );
+    }
+
+    /// External scan 2, finding 21: an unstarted forward whose start midnight has left the ring is valued from
+    /// the part of its own term still on chain, never from the latest segment; a start reading is refused to
+    /// the start crank once it would be a fallback (`start_forward`), and a fully evicted term settles flat.
+    #[test]
+    fn evicted_forward_start_is_estimated_from_the_term_itself_not_the_latest_segment() {
+        let mut b = benchmark();
+        let d0 = 20_010 * DAY;
+        // A benchmark with a year of history behind it (the estimate is bounded below by zero accrual, which
+        // only binds on a benchmark younger than the window it is asked about).
+        publish(&mut b, d0 - 365 * DAY, 500);
+        publish(&mut b, d0 - 60, 500);
+        // 500 bp for the first half of the term, 900 bp for the second half.
+        let start_ts = d0 + 28 * DAY;
+        let matures = start_ts + 90 * DAY;
+        let mut t = d0;
+        while t < start_ts + 45 * DAY {
+            t += DAY;
+            publish(&mut b, t + 17, 500);
+        }
+        while t < matures + 90 * DAY {
+            t += DAY;
+            publish(&mut b, t + 17, 900);
+        }
+        // Start evicted (more than 128 days back), maturity still exact, and the 37 retained in-term days all
+        // realised 900 bp.
+        assert_eq!(
+            accrual_lookup(&b, start_ts).unwrap().1,
+            FixingKind::Fallback
+        );
+        assert_eq!(accrual_lookup(&b, matures).unwrap().1, FixingKind::Fixing);
+        let mut s = spot_swap(start_ts, matures, LegKind::PayFixed, 700, 0);
+        s.link_flags = LINK_FORWARD;
+        s.start_ts = start_ts;
+        s.opened_ts = d0;
+        assert!(!s.is_started() && s.accrual_from() == start_ts);
+        let (a, e, kind) = settlement_readings(&b, &s, start_ts).unwrap();
+        assert_eq!(kind, FixingKind::Fallback);
+        // The window still on chain is inside the term and realised 900 bp throughout, so the estimate is 900 bp
+        // over the whole term: driven by in-term history only, not by the 500 bp the segment would extrapolate.
+        let (oldest_ts, oldest_accrual) = oldest_known(&b).unwrap();
+        assert!(oldest_ts > start_ts && oldest_ts < matures);
+        assert_eq!(e - oldest_accrual, flat(900, matures - oldest_ts));
+        assert_eq!(e - a, flat(900, matures - start_ts));
+        // Publishing a very different rate afterwards does not move it: the latest segment is never used.
+        for _ in 0..3 {
+            t += DAY;
+            publish(&mut b, t + 17, 50);
+        }
+        assert_eq!(
+            settlement_readings(&b, &s, start_ts).unwrap(),
+            (a, e, FixingKind::Fallback)
+        );
+        // Once the maturity is gone too the swap settles flat.
+        for _ in 0..130 {
+            t += DAY;
+            publish(&mut b, t + 17, 50);
+        }
+        let (a3, e3, k3) = settlement_readings(&b, &s, start_ts).unwrap();
+        assert_eq!(
+            (k3, e3 - a3),
+            (FixingKind::Fallback, flat(700, matures - start_ts))
+        );
+    }
+
+    /// External scan 2, finding 14: the offset to a forward's start rounds down and is capped so the unwind
+    /// curve is never asked past the horizon the open was checked against.
+    #[test]
+    fn days_to_start_rounds_down_and_stays_inside_the_horizon() {
+        let now = 20_010 * DAY + 9 * 3_600;
+        // A 90-day forward opened at 09:00 starts at the midnight 90 days and 15 hours away.
+        let start = align_up_to_day(now + 90 * DAY).unwrap();
+        assert_eq!(start - now, 90 * DAY + 15 * 3_600);
+        assert_eq!(days_to_start(now, start, vernier::Tenor::D90).unwrap(), 90);
+        assert_eq!(days_to_start(now, start, vernier::Tenor::D28).unwrap(), 90);
+        // Exactly at a midnight and part way through the term.
+        assert_eq!(
+            days_to_start(start - 90 * DAY, start, vernier::Tenor::D90).unwrap(),
+            90
+        );
+        assert_eq!(
+            days_to_start(start - 10 * DAY - 1, start, vernier::Tenor::D60).unwrap(),
+            10
+        );
+        assert_eq!(
+            days_to_start(start - 1, start, vernier::Tenor::D60).unwrap(),
+            0
+        );
+        assert_eq!(days_to_start(start, start, vernier::Tenor::D60).unwrap(), 0);
+        assert_eq!(
+            days_to_start(start + DAY, start, vernier::Tenor::D60).unwrap(),
+            0
+        );
+        // The cap: an offset the curve could not price with this tenor is pulled back to the horizon.
+        assert_eq!(
+            days_to_start(start - 200 * DAY, start, vernier::Tenor::D90).unwrap(),
+            90
+        );
+        assert_eq!(
+            days_to_start(start - 200 * DAY, start, vernier::Tenor::D180).unwrap(),
+            0
+        );
+        // The curve accepts every value the function can return for every tenor.
+        for t in [
+            vernier::Tenor::D28,
+            vernier::Tenor::D60,
+            vernier::Tenor::D90,
+        ] {
+            let d = days_to_start(now, start, t).unwrap();
+            assert!(vernier::quote_mid_forward(
+                684,
+                671,
+                d,
+                t,
+                vernier::Leg::Pay,
+                &vernier::DEFAULT_PARAMS
+            )
+            .is_ok());
+        }
     }
 
     /// External scan 1, M-17: a closing swap releases the budget it was charged in the open window only.
@@ -1673,7 +1768,7 @@ mod tests {
         assert_eq!(clamped, 100_000 - 1_232_876_712);
         // Withdrawals give no credit for the unrealised loss: effective capital is tvl.
         assert_eq!(
-            p.effective_tvl_for_withdraw(a_now, 800, now).unwrap(),
+            p.effective_tvl_for_withdraw(a_now, 800, now, 0).unwrap(),
             p.tvl
         );
     }

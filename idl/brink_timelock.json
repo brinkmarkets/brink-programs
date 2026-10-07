@@ -69,6 +69,96 @@
       "args": []
     },
     {
+      "name": "cancel_upgrade",
+      "docs": [
+        "Cancels a queued `Upgrade` and closes its buffer, whose authority is the PDA, back to the proposer that",
+        "paid for it. Same permission as `cancel`."
+      ],
+      "discriminator": [
+        216,
+        52,
+        40,
+        78,
+        188,
+        214,
+        201,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "operation"
+          ]
+        },
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "operation",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer",
+          "writable": true
+        },
+        {
+          "name": "loader",
+          "address": "BPFLoaderUpgradeab1e11111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "execute_config",
       "docs": [
         "Executes a `SetDelay` or `SetRoles` operation on the timelock itself."
@@ -532,7 +622,9 @@
     {
       "name": "queue",
       "docs": [
-        "Queues an operation. Only the proposer. The eta is fixed at queue time from the current delay."
+        "Queues a `SetDelay`, `SetRoles` or `SetUpgradeAuthority` operation. Only the proposer. The eta is fixed at",
+        "queue time from the current delay. Upgrades and invokes, whose contents are not carried by their kind,",
+        "go through `queue_upgrade` and `queue_invoke`."
       ],
       "discriminator": [
         112,
@@ -615,6 +707,232 @@
           }
         }
       ]
+    },
+    {
+      "name": "queue_invoke",
+      "docs": [
+        "Queues an `Invoke` with its contents disclosed: the full account list and the instruction data are",
+        "arguments, hashed on chain and published in the queue event. Only the proposer. The `[\"authority\"]` PDA",
+        "is recorded as a signer wherever it appears, as the executor will present it."
+      ],
+      "discriminator": [
+        52,
+        234,
+        123,
+        77,
+        194,
+        59,
+        202,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "timelock"
+          ]
+        },
+        {
+          "name": "operation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "timelock.nonce",
+                "account": "Timelock"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "metas",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "InvokeMeta"
+              }
+            }
+          }
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
+      "name": "queue_upgrade",
+      "docs": [
+        "Queues an `Upgrade` with the buffer disclosed: the buffer is read here, its authority must be the",
+        "`[\"authority\"]` PDA so that it cannot be rewritten after review, and its content hash is taken by the",
+        "program rather than supplied by the proposer. Only the proposer."
+      ],
+      "discriminator": [
+        114,
+        107,
+        111,
+        117,
+        192,
+        153,
+        170,
+        59
+      ],
+      "accounts": [
+        {
+          "name": "timelock",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  105,
+                  109,
+                  101,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "timelock"
+          ]
+        },
+        {
+          "name": "operation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "timelock.nonce",
+                "account": "Timelock"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_program"
+        },
+        {
+          "name": "buffer"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -670,6 +988,19 @@
         45,
         29,
         164
+      ]
+    },
+    {
+      "name": "InvokeDisclosed",
+      "discriminator": [
+        97,
+        181,
+        140,
+        242,
+        95,
+        67,
+        161,
+        5
       ]
     },
     {
@@ -761,6 +1092,16 @@
       "code": 6014,
       "name": "NotUpgradeAuthority",
       "msg": "only the program's upgrade authority may initialise"
+    },
+    {
+      "code": 6015,
+      "name": "Undisclosed",
+      "msg": "upgrades and invokes are queued through queue_upgrade and queue_invoke, which disclose their contents"
+    },
+    {
+      "code": 6016,
+      "name": "BufferAuthority",
+      "msg": "the buffer's authority must be the timelock's authority PDA before it is queued"
     }
   ],
   "types": [
@@ -796,6 +1137,62 @@
                 "name": "OperationKind"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvokeDisclosed",
+      "docs": [
+        "The full contents of a queued `Invoke`, published when it is queued."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operation",
+            "type": "pubkey"
+          },
+          {
+            "name": "program",
+            "type": "pubkey"
+          },
+          {
+            "name": "metas",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "InvokeMeta"
+                }
+              }
+            }
+          },
+          {
+            "name": "data",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvokeMeta",
+      "docs": [
+        "One account of a disclosed `Invoke`: the key and the privilege flags the executor will present."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_signer",
+            "type": "bool"
+          },
+          {
+            "name": "is_writable",
+            "type": "bool"
           }
         ]
       }

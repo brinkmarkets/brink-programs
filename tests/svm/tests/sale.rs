@@ -159,7 +159,13 @@ impl S {
         .pack_into_slice(&mut data);
         svm.set_account(
             mint,
-            Account { lamports: 10 * SOL, data, owner: TOKEN_PROGRAM, executable: false, rent_epoch: 0 },
+            Account {
+                lamports: 10 * SOL,
+                data,
+                owner: TOKEN_PROGRAM,
+                executable: false,
+                rent_epoch: 0,
+            },
         )
         .unwrap();
         let mut c = svm.get_sysvar::<Clock>();
@@ -170,7 +176,14 @@ impl S {
         let mut c2 = svm.get_sysvar::<Clock>();
         c2.unix_timestamp = BOOT;
         svm.set_sysvar(&c2);
-        S { svm, payer, authority, treasury, mint, mint_auth }
+        S {
+            svm,
+            payer,
+            authority,
+            treasury,
+            mint,
+            mint_auth,
+        }
     }
     fn now(&self) -> i64 {
         self.svm.get_sysvar::<Clock>().unix_timestamp
@@ -215,14 +228,23 @@ impl S {
         decode("Round", &self.svm.get_account(&round_pda(id)).unwrap().data)
     }
     fn participant(&self, id: u8, buyer: &Pubkey) -> Participant {
-        decode("Participant", &self.svm.get_account(&part_pda(&round_pda(id), buyer)).unwrap().data)
+        decode(
+            "Participant",
+            &self
+                .svm
+                .get_account(&part_pda(&round_pda(id), buyer))
+                .unwrap()
+                .data,
+        )
     }
     fn lamports(&self, k: &Pubkey) -> u64 {
         self.svm.get_account(k).map(|a| a.lamports).unwrap_or(0)
     }
     fn tokens(&self, k: &Pubkey) -> u64 {
         let a = self.svm.get_account(k).expect("token account");
-        spl_token_interface::state::Account::unpack(&a.data).unwrap().amount
+        spl_token_interface::state::Account::unpack(&a.data)
+            .unwrap()
+            .amount
     }
     fn create_ata(&mut self, owner: &Pubkey) -> Pubkey {
         let ix = spl_associated_token_account_interface::instruction::create_associated_token_account_idempotent(
@@ -236,7 +258,11 @@ impl S {
             accounts: ix
                 .accounts
                 .into_iter()
-                .map(|m| AccountMeta { pubkey: m.pubkey, is_signer: m.is_signer, is_writable: m.is_writable })
+                .map(|m| AccountMeta {
+                    pubkey: m.pubkey,
+                    is_signer: m.is_signer,
+                    is_writable: m.is_writable,
+                })
                 .collect(),
             data: ix.data,
         };
@@ -245,13 +271,25 @@ impl S {
     }
     fn mint_to(&mut self, to: &Pubkey, amount: u64) {
         let auth = self.mint_auth.insecure_clone();
-        let ix = spl_token_interface::instruction::mint_to(&TOKEN_PROGRAM, &self.mint, to, &auth.pubkey(), &[], amount).unwrap();
+        let ix = spl_token_interface::instruction::mint_to(
+            &TOKEN_PROGRAM,
+            &self.mint,
+            to,
+            &auth.pubkey(),
+            &[],
+            amount,
+        )
+        .unwrap();
         let ix = Instruction {
             program_id: ix.program_id,
             accounts: ix
                 .accounts
                 .into_iter()
-                .map(|m| AccountMeta { pubkey: m.pubkey, is_signer: m.is_signer, is_writable: m.is_writable })
+                .map(|m| AccountMeta {
+                    pubkey: m.pubkey,
+                    is_signer: m.is_signer,
+                    is_writable: m.is_writable,
+                })
                 .collect(),
             data: ix.data,
         };
@@ -272,16 +310,28 @@ impl S {
             ro(SYSTEM),
         ];
         accounts.extend(evt());
-        let ix = Instruction { program_id: SALE, accounts, data: data("create_round", &args) };
+        let ix = Instruction {
+            program_id: SALE,
+            accounts,
+            data: data("create_round", &args),
+        };
         self.send(&[ix], &[&auth])
     }
     fn authority_ix(&self, name: &str, id: u8, extra: &[u8]) -> Instruction {
         let round = round_pda(id);
-        let mut accounts = vec![sig(self.authority.pubkey()), rw(round), ro(vault_pda(&round))];
+        let mut accounts = vec![
+            sig(self.authority.pubkey()),
+            rw(round),
+            ro(vault_pda(&round)),
+        ];
         accounts.extend(evt());
         let mut d = ix_disc(name).to_vec();
         d.extend_from_slice(extra);
-        Instruction { program_id: SALE, accounts, data: d }
+        Instruction {
+            program_id: SALE,
+            accounts,
+            data: d,
+        }
     }
     fn fund(&mut self, id: u8, amount: u64) {
         let v = vault_pda(&round_pda(id));
@@ -292,25 +342,56 @@ impl S {
         let ix = self.authority_ix("open_round", id, &[]);
         self.send(&[ix], &[&auth])
     }
-    fn contribute_ix(&self, id: u8, buyer: &Pubkey, lamports: u64, proof: &[[u8; 32]]) -> Instruction {
+    fn contribute_ix(
+        &self,
+        id: u8,
+        buyer: &Pubkey,
+        lamports: u64,
+        proof: &[[u8; 32]],
+    ) -> Instruction {
         let round = round_pda(id);
-        let mut accounts = vec![sigw(*buyer), rw(round), rw(escrow_pda(&round)), rw(part_pda(&round, buyer)), ro(SYSTEM)];
+        let mut accounts = vec![
+            sigw(*buyer),
+            rw(round),
+            rw(escrow_pda(&round)),
+            rw(part_pda(&round, buyer)),
+            ro(SYSTEM),
+        ];
         accounts.extend(evt());
         #[derive(BorshSerialize)]
         struct A {
             lamports: u64,
             proof: Vec<[u8; 32]>,
         }
-        Instruction { program_id: SALE, accounts, data: data("contribute", &A { lamports, proof: proof.to_vec() }) }
+        Instruction {
+            program_id: SALE,
+            accounts,
+            data: data(
+                "contribute",
+                &A {
+                    lamports,
+                    proof: proof.to_vec(),
+                },
+            ),
+        }
     }
-    fn contribute(&mut self, id: u8, buyer: &Keypair, lamports: u64) -> Result<Vec<String>, String> {
+    fn contribute(
+        &mut self,
+        id: u8,
+        buyer: &Keypair,
+        lamports: u64,
+    ) -> Result<Vec<String>, String> {
         let ix = self.contribute_ix(id, &buyer.pubkey(), lamports, &[]);
         self.send(&[ix], &[buyer])
     }
     fn close_ix(&self, id: u8, caller: &Pubkey) -> Instruction {
         let mut accounts = vec![sig(*caller), rw(round_pda(id))];
         accounts.extend(evt());
-        Instruction { program_id: SALE, accounts, data: ix_disc("close_round").to_vec() }
+        Instruction {
+            program_id: SALE,
+            accounts,
+            data: ix_disc("close_round").to_vec(),
+        }
     }
     fn finalise(&mut self, id: u8, tge_ts: i64) -> Result<Vec<String>, String> {
         let round = round_pda(id);
@@ -328,7 +409,11 @@ impl S {
             ro(SYSTEM),
         ];
         accounts.extend(evt());
-        let ix = Instruction { program_id: SALE, accounts, data: data("finalise", &tge_ts) };
+        let ix = Instruction {
+            program_id: SALE,
+            accounts,
+            data: data("finalise", &tge_ts),
+        };
         self.send(&[ix], &[&auth])
     }
     fn claim(&mut self, id: u8, buyer: &Keypair) -> Result<Vec<String>, String> {
@@ -344,14 +429,28 @@ impl S {
             ro(TOKEN_PROGRAM),
         ];
         accounts.extend(evt());
-        let ix = Instruction { program_id: SALE, accounts, data: ix_disc("claim").to_vec() };
+        let ix = Instruction {
+            program_id: SALE,
+            accounts,
+            data: ix_disc("claim").to_vec(),
+        };
         self.send(&[ix], &[buyer])
     }
     fn refund(&mut self, id: u8, buyer: &Keypair) -> Result<Vec<String>, String> {
         let round = round_pda(id);
-        let mut accounts = vec![sigw(buyer.pubkey()), ro(round), rw(part_pda(&round, &buyer.pubkey())), rw(escrow_pda(&round)), ro(SYSTEM)];
+        let mut accounts = vec![
+            sigw(buyer.pubkey()),
+            ro(round),
+            rw(part_pda(&round, &buyer.pubkey())),
+            rw(escrow_pda(&round)),
+            ro(SYSTEM),
+        ];
         accounts.extend(evt());
-        let ix = Instruction { program_id: SALE, accounts, data: ix_disc("refund").to_vec() };
+        let ix = Instruction {
+            program_id: SALE,
+            accounts,
+            data: ix_disc("refund").to_vec(),
+        };
         self.send(&[ix], &[buyer])
     }
     fn buyer(&mut self, sol: u64) -> Keypair {
@@ -409,7 +508,11 @@ fn angel_round_full_life() {
 
     // Cannot open before the vault can honour the hard cap: 500 SOL / 10 000 lamports = 50M tokens.
     s.fund(1, 49_999_999 * TOKEN);
-    s.must_fail(&[s.authority_ix("open_round", 1, &[])], &[&s.authority.insecure_clone()], "Unfunded");
+    s.must_fail(
+        &[s.authority_ix("open_round", 1, &[])],
+        &[&s.authority.insecure_clone()],
+        "Unfunded",
+    );
     s.fund(1, TOKEN);
     s.open(1).unwrap();
     assert_eq!(s.round(1).state, 1, "open");
@@ -436,9 +539,17 @@ fn angel_round_full_life() {
     s.contribute(1, &a, 10 * SOL).unwrap();
     let pa = s.participant(1, &a.pubkey());
     assert_eq!(pa.lamports, 10 * SOL);
-    assert_eq!(pa.tokens, 1_000_000 * TOKEN, "10 SOL at 10 000 lamports per token");
+    assert_eq!(
+        pa.tokens,
+        1_000_000 * TOKEN,
+        "10 SOL at 10 000 lamports per token"
+    );
     let floor = s.svm.minimum_balance_for_rent_exemption(0);
-    assert_eq!(s.lamports(&escrow_pda(&round_pda(1))), 10 * SOL + floor, "contributions on top of the escrow rent floor");
+    assert_eq!(
+        s.lamports(&escrow_pda(&round_pda(1))),
+        10 * SOL + floor,
+        "contributions on top of the escrow rent floor"
+    );
     // Top up within bounds.
     s.contribute(1, &a, 40 * SOL).unwrap();
     assert_eq!(s.participant(1, &a.pubkey()).lamports, 50 * SOL);
@@ -488,10 +599,18 @@ fn angel_round_full_life() {
     let tge = s.now() + 2 * DAY;
     s.finalise(1, tge).unwrap();
     let floor = s.svm.minimum_balance_for_rent_exemption(0);
-    assert_eq!(s.lamports(&s.treasury.pubkey()) - before, 500 * SOL + floor, "contributions plus the escrow rent floor");
+    assert_eq!(
+        s.lamports(&s.treasury.pubkey()) - before,
+        500 * SOL + floor,
+        "contributions plus the escrow rent floor"
+    );
     assert_eq!(s.lamports(&escrow_pda(&round_pda(1))), 0);
     assert_eq!(s.round(1).state, 3, "finalised");
-    assert_eq!(s.tokens(&vault_pda(&round_pda(1))), 50_000_000 * TOKEN, "nothing unsold");
+    assert_eq!(
+        s.tokens(&vault_pda(&round_pda(1))),
+        50_000_000 * TOKEN,
+        "nothing unsold"
+    );
 
     // Before TGE nothing vests.
     match s.claim(1, &a) {
@@ -517,11 +636,19 @@ fn angel_round_full_life() {
     s.warp(40 * DAY);
     s.claim(1, &a).unwrap();
     assert_eq!(s.tokens(&at), total_a);
-    assert!(s.svm.get_account(&part_pda(&round_pda(1), &a.pubkey())).map_or(true, |acc| acc.lamports == 0), "fully claimed position closes and returns its rent");
+    assert!(
+        s.svm
+            .get_account(&part_pda(&round_pda(1), &a.pubkey()))
+            .is_none_or(|acc| acc.lamports == 0),
+        "fully claimed position closes and returns its rent"
+    );
     assert_eq!(s.round(1).tokens_claimed, total_a);
     // A closed position cannot claim again: the record is gone.
     match s.claim(1, &a) {
-        Err(e) => assert!(e.contains("AccountNotInitialized") || e.contains("3012"), "{e}"),
+        Err(e) => assert!(
+            e.contains("AccountNotInitialized") || e.contains("3012"),
+            "{e}"
+        ),
         Ok(_) => panic!("claimed from a closed position"),
     }
     // A late claimer gets everything in one go.
@@ -544,7 +671,11 @@ fn public_round_unlocked_and_unsold_returned() {
     s.warp(120);
     let a = s.buyer(300);
     s.contribute(2, &a, 200 * SOL).unwrap();
-    assert_eq!(s.participant(2, &a.pubkey()).tokens, 4_000_000 * TOKEN, "200 SOL at 50 000 lamports");
+    assert_eq!(
+        s.participant(2, &a.pubkey()).tokens,
+        4_000_000 * TOKEN,
+        "200 SOL at 50 000 lamports"
+    );
     // Many wallets to pass the soft cap.
     for _ in 0..12 {
         let k = s.buyer(210);
@@ -568,7 +699,11 @@ fn public_round_unlocked_and_unsold_returned() {
     assert_eq!(s.tokens(&vault_pda(&round_pda(2))), 52_000_000 * TOKEN);
     s.warp(60);
     s.claim(2, &a).unwrap();
-    assert_eq!(s.tokens(&ata(&a.pubkey(), &s.mint)), 4_000_000 * TOKEN, "fully unlocked at TGE");
+    assert_eq!(
+        s.tokens(&ata(&a.pubkey(), &s.mint)),
+        4_000_000 * TOKEN,
+        "fully unlocked at TGE"
+    );
 }
 
 #[test]
@@ -595,21 +730,48 @@ fn soft_cap_missed_cancels_and_refunds() {
     let before_a = s.lamports(&a.pubkey());
     let part_rent = s.lamports(&part_pda(&round_pda(2), &a.pubkey()));
     s.refund(2, &a).unwrap();
-    assert_eq!(s.lamports(&a.pubkey()) - before_a, 5 * SOL + part_rent, "the deposit and the position rent both return");
-    assert!(s.svm.get_account(&part_pda(&round_pda(2), &a.pubkey())).map_or(true, |acc| acc.lamports == 0), "position record closed");
+    assert_eq!(
+        s.lamports(&a.pubkey()) - before_a,
+        5 * SOL + part_rent,
+        "the deposit and the position rent both return"
+    );
+    assert!(
+        s.svm
+            .get_account(&part_pda(&round_pda(2), &a.pubkey()))
+            .is_none_or(|acc| acc.lamports == 0),
+        "position record closed"
+    );
     match s.refund(2, &a) {
-        Err(e) => assert!(e.contains("AccountNotInitialized") || e.contains("3012"), "{e}"),
+        Err(e) => assert!(
+            e.contains("AccountNotInitialized") || e.contains("3012"),
+            "{e}"
+        ),
         Ok(_) => panic!("double refund"),
     }
     s.refund(2, &b).unwrap();
     let floor = s.svm.minimum_balance_for_rent_exemption(0);
-    assert_eq!(s.lamports(&escrow_pda(&round_pda(2))), floor, "escrow holds only its rent floor after all refunds");
+    assert_eq!(
+        s.lamports(&escrow_pda(&round_pda(2))),
+        floor,
+        "escrow holds only its rent floor after all refunds"
+    );
     // Authority recovers the tokens.
     let round = round_pda(2);
     let dest = s.create_ata(&s.authority.pubkey());
-    let mut accounts = vec![sig(s.authority.pubkey()), ro(round), ro(s.mint), rw(vault_pda(&round)), rw(dest), ro(TOKEN_PROGRAM)];
+    let mut accounts = vec![
+        sig(s.authority.pubkey()),
+        ro(round),
+        ro(s.mint),
+        rw(vault_pda(&round)),
+        rw(dest),
+        ro(TOKEN_PROGRAM),
+    ];
     accounts.extend(evt());
-    let ix = Instruction { program_id: SALE, accounts, data: ix_disc("withdraw_cancelled").to_vec() };
+    let ix = Instruction {
+        program_id: SALE,
+        accounts,
+        data: ix_disc("withdraw_cancelled").to_vec(),
+    };
     let auth = s.authority.insecure_clone();
     s.must(&[ix], &[&auth]);
     assert_eq!(s.tokens(&dest), 200_000_000 * TOKEN);
@@ -676,7 +838,11 @@ fn creation_refuses_bad_parameters_and_authority_is_enforced() {
     for name in ["open_round", "cancel_round"] {
         let mut accounts = vec![sig(stranger.pubkey()), rw(round), ro(vault_pda(&round))];
         accounts.extend(evt());
-        let ix = Instruction { program_id: SALE, accounts, data: ix_disc(name).to_vec() };
+        let ix = Instruction {
+            program_id: SALE,
+            accounts,
+            data: ix_disc(name).to_vec(),
+        };
         s.must_fail(&[ix], &[&stranger], "Authority");
     }
     // Cancel before opening, then the vault can be withdrawn.
@@ -688,16 +854,28 @@ fn creation_refuses_bad_parameters_and_authority_is_enforced() {
     let new_auth = s.buyer(10);
     let ix = s.authority_ix("set_authority", 1, new_auth.pubkey().as_ref());
     s.must(&[ix], &[&auth]);
-    assert_eq!(s.round(1).authority, auth.pubkey(), "unchanged until accepted");
+    assert_eq!(
+        s.round(1).authority,
+        auth.pubkey(),
+        "unchanged until accepted"
+    );
     assert_eq!(s.round(1).pending_authority, new_auth.pubkey());
     let stranger2 = s.buyer(1);
     let mut accounts = vec![sig(stranger2.pubkey()), rw(round_pda(1))];
     accounts.extend(evt());
-    let ix = Instruction { program_id: SALE, accounts, data: ix_disc("accept_authority").to_vec() };
+    let ix = Instruction {
+        program_id: SALE,
+        accounts,
+        data: ix_disc("accept_authority").to_vec(),
+    };
     s.must_fail(&[ix], &[&stranger2], "Authority");
     let mut accounts = vec![sig(new_auth.pubkey()), rw(round_pda(1))];
     accounts.extend(evt());
-    let ix = Instruction { program_id: SALE, accounts, data: ix_disc("accept_authority").to_vec() };
+    let ix = Instruction {
+        program_id: SALE,
+        accounts,
+        data: ix_disc("accept_authority").to_vec(),
+    };
     s.must(&[ix], &[&new_auth]);
     assert_eq!(s.round(1).authority, new_auth.pubkey());
     assert_eq!(s.round(1).pending_authority, Pubkey::default());

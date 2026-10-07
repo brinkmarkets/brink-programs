@@ -3,19 +3,27 @@ anchor_version = "1.1.2"
 solana_version = "3.1.10"
 
 [workspace]
-members = ["swap_amm", "brink_index", "brink_timelock", "brink_sale"]
+members = ["swap_amm", "brink_index", "brink_timelock", "brink_sale", "brink_allowlist", "brink_venue", "brink_vaults", "brink_split"]
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
+brink_allowlist = "FaNttHSrjcQruS8qBNFDdmAnKq9Z4ZGu2y1UkMYXe1UR"
+brink_venue = "Boj38zJFfsN72DBL2nrJEfk1ewskn11EbdikgHMBX7v2"
+brink_vaults = "HhDTKdT36W1vE1DBgKnXDp7gFtxpxhRxovmfanuhaQiy"
+brink_split = "ASYzAAxpLwQW5XwdL1GJbpQ15onLR6uM1HBSCRTza9sz"
 swap_amm = "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce"
 brink_index = "J2udZ8xzSsETsrSnbW3DeLFBTVooKRup3P7LWKSRwuvS"
 brink_timelock = "CeQz4x7Ad7Hg715Tn4PHtvtAxYin2PHv4KGaD3KS3kM5"
 brink_sale = "GYCJoDiZCh7mbqyWRjYJmpPUt3nPLs6887tGm58rmK3v"
 
 [programs.devnet]
+brink_allowlist = "FaNttHSrjcQruS8qBNFDdmAnKq9Z4ZGu2y1UkMYXe1UR"
+brink_venue = "Boj38zJFfsN72DBL2nrJEfk1ewskn11EbdikgHMBX7v2"
+brink_vaults = "HhDTKdT36W1vE1DBgKnXDp7gFtxpxhRxovmfanuhaQiy"
+brink_split = "ASYzAAxpLwQW5XwdL1GJbpQ15onLR6uM1HBSCRTza9sz"
 swap_amm = "EbD862QySygYKCMd8RHM2JaHqnduLQXB8Y632U3pQtce"
 brink_index = "J2udZ8xzSsETsrSnbW3DeLFBTVooKRup3P7LWKSRwuvS"
 brink_timelock = "CeQz4x7Ad7Hg715Tn4PHtvtAxYin2PHv4KGaD3KS3kM5"

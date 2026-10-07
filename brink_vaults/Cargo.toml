@@ -1,0 +1,31 @@
+[package]
+name = "brink_vaults"
+version = "0.1.0"
+description = "Brink fixed vaults: term series that place USDC at a venue and receive fixed on the Brink pool, so depositors hold a fixed APY to maturity"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "brink_vaults"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build", "swap_amm/idl-build", "brink_venue/idl-build", "brink_index/idl-build"]
+anchor-debug = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = { workspace = true, features = ["event-cpi"] }
+anchor-spl = { workspace = true }
+swap_amm = { path = "../swap_amm", features = ["cpi"] }
+brink_venue = { path = "../brink_venue", features = ["cpi"] }
+brink_index = { path = "../brink_index", features = ["cpi"] }
+
+[lints]
+workspace = true

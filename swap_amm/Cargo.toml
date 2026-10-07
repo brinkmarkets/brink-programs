@@ -18,7 +18,7 @@ no-entrypoint = []
 no-idl = []
 anchor-debug = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build", "brink_index/idl-build"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build", "brink_index/idl-build", "brink_venue/idl-build"]
 test-mint = []
 
 [dependencies]
@@ -26,6 +26,7 @@ anchor-lang = { workspace = true, features = ["event-cpi"] }
 anchor-spl = { workspace = true }
 vernier = { workspace = true, features = ["anchor"] }
 brink_index = { path = "../brink_index", features = ["cpi"] }
+brink_venue = { path = "../brink_venue", features = ["cpi"] }
 
 [dev-dependencies]
 proptest = "1.5"

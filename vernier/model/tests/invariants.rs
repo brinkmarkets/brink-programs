@@ -279,7 +279,8 @@ fn demand_exhaustive_monotone_in_before_and_d() {
         if after.abs() <= before.abs() {
             0
         } else {
-            let twice_avg = if before == 0 || (before < 0) == (after < 0) { before.abs() + after.abs() } else { after.abs() };
+            // Signed trapezoid (external scan 2, finding 19): (after² − before²) / d = 2 · before + d.
+            let twice_avg = (2 * before + d).max(0);
             r::Q::new(k * twice_avg, 20_000).round_half_up().min(cap)
         }
     };

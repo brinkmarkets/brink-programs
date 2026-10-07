@@ -5,9 +5,11 @@
 //! Interface surface (review F-30, ADR-003): entries only. `BeforeOpen` and `BeforeDeposit` may veto;
 //! `AfterOpen` and `AfterDeposit` are notifications made after the pool account has been serialised, so the hook
 //! reads post-state. No exit path (withdraw, cancel, settle, liquidate) calls a hook, in any mode: exits are
-//! unconditional. Hooks are called in `Normal` mode only; `Limited`, `WithdrawOnly` and `Halted` make no hook
-//! CPI, so governance can switch a misbehaving hook off without touching the pool. Closes are observable through
-//! the `SwapClosed` and `LiquidityChanged` events.
+//! unconditional. The veto points run in every mode that still admits the entry (`Normal` and `Limited`): a
+//! permissioned pool's participant rules hold while the protocol is merely limited (external scan 2, finding
+//! 25). The notification points run in `Normal` mode only, so governance can quieten a misbehaving hook by
+//! limiting the protocol, and `WithdrawOnly` and `Halted` admit no entry and make no hook CPI. Closes are
+//! observable through the `SwapClosed` and `LiquidityChanged` events.
 use crate::{errors::BrinkError, state::*};
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{
@@ -53,9 +55,19 @@ fn enabled(f: HookFlags, p: Point) -> bool {
     }
 }
 
-/// Invokes the pool's hook at `point` if enabled and the protocol is in `Normal` mode. `extra` are additional
-/// read-only accounts (e.g. the swap). For `after_*` points the pool account is serialised first so the hook
-/// sees the booked state rather than the pre-instruction bytes.
+/// Whether a hook point runs in `mode`: veto points wherever an entry is admitted, notifications in `Normal`.
+#[must_use]
+pub fn runs_in(point: Point, mode: OperatingMode) -> bool {
+    match mode {
+        OperatingMode::Normal => true,
+        OperatingMode::Limited => !point.is_after(),
+        OperatingMode::WithdrawOnly | OperatingMode::Halted => false,
+    }
+}
+
+/// Invokes the pool's hook at `point` if enabled and the point runs in the current mode (`runs_in`). `extra`
+/// are additional read-only accounts (e.g. the swap). For `after_*` points the pool account is serialised first
+/// so the hook sees the booked state rather than the pre-instruction bytes.
 pub fn call<'info>(
     pool: &Account<'info, Pool>,
     mode: OperatingMode,
@@ -64,7 +76,7 @@ pub fn call<'info>(
     payload: &HookPayload,
     extra: &[AccountInfo<'info>],
 ) -> Result<()> {
-    if mode != OperatingMode::Normal || !enabled(pool.hooks, point) {
+    if !runs_in(point, mode) || !enabled(pool.hooks, point) {
         return Ok(());
     }
     let h = hook.ok_or(BrinkError::HookMismatch)?;
@@ -95,4 +107,27 @@ pub fn call<'info>(
         &infos,
     )
     .map_err(|_| BrinkError::HookRejected.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// External scan 2, finding 25: veto points hold in Limited mode; notifications are Normal-only; the
+    /// non-admitting modes call nothing.
+    #[test]
+    fn veto_points_run_wherever_an_entry_is_admitted() {
+        for p in [Point::BeforeOpen, Point::BeforeDeposit] {
+            assert!(runs_in(p, OperatingMode::Normal));
+            assert!(runs_in(p, OperatingMode::Limited));
+            assert!(!runs_in(p, OperatingMode::WithdrawOnly));
+            assert!(!runs_in(p, OperatingMode::Halted));
+        }
+        for p in [Point::AfterOpen, Point::AfterDeposit] {
+            assert!(runs_in(p, OperatingMode::Normal));
+            assert!(!runs_in(p, OperatingMode::Limited));
+            assert!(!runs_in(p, OperatingMode::WithdrawOnly));
+            assert!(!runs_in(p, OperatingMode::Halted));
+        }
+    }
 }

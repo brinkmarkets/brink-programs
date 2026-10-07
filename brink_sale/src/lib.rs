@@ -76,21 +76,39 @@ pub mod brink_sale {
     pub fn create_round(ctx: Context<CreateRound>, args: CreateRoundArgs) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         require!(args.lamports_per_token > 0, SaleError::Price);
-        require!(args.hard_cap > 0 && args.soft_cap > 0 && args.soft_cap <= args.hard_cap, SaleError::Caps);
+        require!(
+            args.hard_cap > 0 && args.soft_cap > 0 && args.soft_cap <= args.hard_cap,
+            SaleError::Caps
+        );
         require!(
             args.min_per_wallet >= MIN_WALLET_FLOOR
                 && args.min_per_wallet <= args.max_per_wallet
                 && args.max_per_wallet <= args.hard_cap,
             SaleError::WalletBounds
         );
-        require!(args.start_ts >= now && args.end_ts > args.start_ts, SaleError::Window);
-        require!(args.end_ts.checked_sub(args.start_ts).ok_or(SaleError::Math)? <= MAX_WINDOW, SaleError::Window);
-        require!(args.tge_bps >= 1 && args.tge_bps <= 10_000, SaleError::Unlock);
+        require!(
+            args.start_ts >= now && args.end_ts > args.start_ts,
+            SaleError::Window
+        );
+        require!(
+            args.end_ts
+                .checked_sub(args.start_ts)
+                .ok_or(SaleError::Math)?
+                <= MAX_WINDOW,
+            SaleError::Window
+        );
+        require!(
+            args.tge_bps >= 1 && args.tge_bps <= 10_000,
+            SaleError::Unlock
+        );
         require!(
             (args.tge_bps == 10_000) == (args.vest_seconds == 0),
             SaleError::Unlock
         );
-        require!(args.vest_seconds >= 0 && args.vest_seconds <= MAX_VEST_SECONDS, SaleError::Unlock);
+        require!(
+            args.vest_seconds >= 0 && args.vest_seconds <= MAX_VEST_SECONDS,
+            SaleError::Unlock
+        );
         let decimals = ctx.accounts.mint.decimals;
         // The hard cap must be deliverable in tokens that fit u64.
         let _ = tokens_for(args.hard_cap, args.lamports_per_token, decimals)?;
@@ -101,7 +119,10 @@ pub mod brink_sale {
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.key(),
-                Transfer { from: ctx.accounts.authority.to_account_info(), to: ctx.accounts.escrow.to_account_info() },
+                Transfer {
+                    from: ctx.accounts.authority.to_account_info(),
+                    to: ctx.accounts.escrow.to_account_info(),
+                },
             ),
             floor,
         )?;
@@ -157,7 +178,11 @@ pub mod brink_sale {
         let cap_tokens = tokens_for(r.hard_cap, r.lamports_per_token, r.decimals)?;
         require!(ctx.accounts.vault.amount >= cap_tokens, SaleError::Unfunded);
         r.state = RoundState::Open;
-        emit_cpi!(RoundOpened { round: r.key(), cap_tokens, vault_tokens: ctx.accounts.vault.amount });
+        emit_cpi!(RoundOpened {
+            round: r.key(),
+            cap_tokens,
+            vault_tokens: ctx.accounts.vault.amount
+        });
         Ok(())
     }
 
@@ -170,7 +195,10 @@ pub mod brink_sale {
         require!(now >= r.start_ts && now < r.end_ts, SaleError::Window);
         if r.allowlisted {
             require!(proof.len() <= MAX_PROOF, SaleError::Allowlist);
-            require!(verify_allowlist(&r.allowlist_root, &buyer, &proof), SaleError::Allowlist);
+            require!(
+                verify_allowlist(&r.allowlist_root, &buyer, &proof),
+                SaleError::Allowlist
+            );
         }
         let p = &mut ctx.accounts.participant;
         if p.buyer == Pubkey::default() {
@@ -180,7 +208,10 @@ pub mod brink_sale {
             r.participants = r.participants.checked_add(1).ok_or(SaleError::Math)?;
         }
         let wallet_total = p.lamports.checked_add(lamports).ok_or(SaleError::Math)?;
-        require!(wallet_total >= r.min_per_wallet && wallet_total <= r.max_per_wallet, SaleError::WalletBounds);
+        require!(
+            wallet_total >= r.min_per_wallet && wallet_total <= r.max_per_wallet,
+            SaleError::WalletBounds
+        );
         let raised = r.raised.checked_add(lamports).ok_or(SaleError::Math)?;
         require!(raised <= r.hard_cap, SaleError::RoundFull);
         let tokens = tokens_for(lamports, r.lamports_per_token, r.decimals)?;
@@ -189,7 +220,10 @@ pub mod brink_sale {
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.key(),
-                Transfer { from: ctx.accounts.buyer.to_account_info(), to: ctx.accounts.escrow.to_account_info() },
+                Transfer {
+                    from: ctx.accounts.buyer.to_account_info(),
+                    to: ctx.accounts.escrow.to_account_info(),
+                },
             ),
             lamports,
         )?;
@@ -198,7 +232,14 @@ pub mod brink_sale {
         p.tokens = p.tokens.checked_add(tokens).ok_or(SaleError::Math)?;
         r.raised = raised;
         r.tokens_sold = r.tokens_sold.checked_add(tokens).ok_or(SaleError::Math)?;
-        emit_cpi!(Contributed { round: r.key(), buyer, lamports, tokens, raised: r.raised, tokens_sold: r.tokens_sold });
+        emit_cpi!(Contributed {
+            round: r.key(),
+            buyer,
+            lamports,
+            tokens,
+            raised: r.raised,
+            tokens_sold: r.tokens_sold
+        });
         Ok(())
     }
 
@@ -209,8 +250,17 @@ pub mod brink_sale {
         let r = &mut ctx.accounts.round;
         require!(r.state == RoundState::Open, SaleError::State);
         require!(now >= r.end_ts || r.raised == r.hard_cap, SaleError::Window);
-        r.state = if r.raised >= r.soft_cap { RoundState::Closed } else { RoundState::Cancelled };
-        emit_cpi!(RoundClosed { round: r.key(), raised: r.raised, tokens_sold: r.tokens_sold, cancelled: r.state == RoundState::Cancelled });
+        r.state = if r.raised >= r.soft_cap {
+            RoundState::Closed
+        } else {
+            RoundState::Cancelled
+        };
+        emit_cpi!(RoundClosed {
+            round: r.key(),
+            raised: r.raised,
+            tokens_sold: r.tokens_sold,
+            cancelled: r.state == RoundState::Cancelled
+        });
         Ok(())
     }
 
@@ -218,11 +268,19 @@ pub mod brink_sale {
     pub fn cancel_round(ctx: Context<Authority>) -> Result<()> {
         let r = &mut ctx.accounts.round;
         require!(
-            matches!(r.state, RoundState::Pending | RoundState::Open | RoundState::Closed),
+            matches!(
+                r.state,
+                RoundState::Pending | RoundState::Open | RoundState::Closed
+            ),
             SaleError::State
         );
         r.state = RoundState::Cancelled;
-        emit_cpi!(RoundClosed { round: r.key(), raised: r.raised, tokens_sold: r.tokens_sold, cancelled: true });
+        emit_cpi!(RoundClosed {
+            round: r.key(),
+            raised: r.raised,
+            tokens_sold: r.tokens_sold,
+            cancelled: true
+        });
         Ok(())
     }
 
@@ -231,10 +289,24 @@ pub mod brink_sale {
     pub fn expire_round(ctx: Context<Anyone>) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let r = &mut ctx.accounts.round;
-        require!(matches!(r.state, RoundState::Open | RoundState::Closed), SaleError::State);
-        require!(now >= r.end_ts.checked_add(FINALISE_GRACE).ok_or(SaleError::Math)?, SaleError::Window);
+        require!(
+            matches!(r.state, RoundState::Open | RoundState::Closed),
+            SaleError::State
+        );
+        require!(
+            now >= r
+                .end_ts
+                .checked_add(FINALISE_GRACE)
+                .ok_or(SaleError::Math)?,
+            SaleError::Window
+        );
         r.state = RoundState::Cancelled;
-        emit_cpi!(RoundClosed { round: r.key(), raised: r.raised, tokens_sold: r.tokens_sold, cancelled: true });
+        emit_cpi!(RoundClosed {
+            round: r.key(),
+            raised: r.raised,
+            tokens_sold: r.tokens_sold,
+            cancelled: true
+        });
         Ok(())
     }
 
@@ -243,8 +315,17 @@ pub mod brink_sale {
         let now = Clock::get()?.unix_timestamp;
         let r = &mut ctx.accounts.round;
         require!(r.state == RoundState::Closed, SaleError::State);
-        require!(now < r.end_ts.checked_add(FINALISE_GRACE).ok_or(SaleError::Math)?, SaleError::Window);
-        require!(tge_ts >= now && tge_ts <= now.checked_add(MAX_TGE_DELAY).ok_or(SaleError::Math)?, SaleError::Window);
+        require!(
+            now < r
+                .end_ts
+                .checked_add(FINALISE_GRACE)
+                .ok_or(SaleError::Math)?,
+            SaleError::Window
+        );
+        require!(
+            tge_ts >= now && tge_ts <= now.checked_add(MAX_TGE_DELAY).ok_or(SaleError::Math)?,
+            SaleError::Window
+        );
         r.tge_ts = tge_ts;
         r.state = RoundState::Finalised;
 
@@ -254,13 +335,21 @@ pub mod brink_sale {
         system_program::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.system_program.key(),
-                Transfer { from: ctx.accounts.escrow.to_account_info(), to: ctx.accounts.treasury.to_account_info() },
+                Transfer {
+                    from: ctx.accounts.escrow.to_account_info(),
+                    to: ctx.accounts.treasury.to_account_info(),
+                },
                 &[seeds],
             ),
             escrow_lamports,
         )?;
 
-        let unsold = ctx.accounts.vault.amount.checked_sub(r.tokens_sold).ok_or(SaleError::Math)?;
+        let unsold = ctx
+            .accounts
+            .vault
+            .amount
+            .checked_sub(r.tokens_sold)
+            .ok_or(SaleError::Math)?;
         if unsold > 0 {
             let vault_seeds: &[&[u8]] = &[b"round", &[r.round_id], &[r.bump]];
             token_interface::transfer_checked(
@@ -278,7 +367,14 @@ pub mod brink_sale {
                 r.decimals,
             )?;
         }
-        emit_cpi!(RoundFinalised { round: round_key, tge_ts, raised: r.raised, escrow_swept: escrow_lamports, tokens_sold: r.tokens_sold, unsold_returned: unsold });
+        emit_cpi!(RoundFinalised {
+            round: round_key,
+            tge_ts,
+            raised: r.raised,
+            escrow_swept: escrow_lamports,
+            tokens_sold: r.tokens_sold,
+            unsold_returned: unsold
+        });
         Ok(())
     }
 
@@ -311,10 +407,17 @@ pub mod brink_sale {
         let (buyer_key, claimed_total, finished) = (p.buyer, p.claimed, p.claimed == p.tokens);
         let r = &mut ctx.accounts.round;
         r.tokens_claimed = r.tokens_claimed.checked_add(due).ok_or(SaleError::Math)?;
-        emit_cpi!(Claimed { round: r.key(), buyer: buyer_key, tokens: due, claimed_total });
+        emit_cpi!(Claimed {
+            round: r.key(),
+            buyer: buyer_key,
+            tokens: due,
+            claimed_total
+        });
         if finished {
             // Everything is paid: the participant record closes and its rent returns to the buyer.
-            ctx.accounts.participant.close(ctx.accounts.buyer.to_account_info())?;
+            ctx.accounts
+                .participant
+                .close(ctx.accounts.buyer.to_account_info())?;
         }
         Ok(())
     }
@@ -330,13 +433,20 @@ pub mod brink_sale {
         system_program::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.system_program.key(),
-                Transfer { from: ctx.accounts.escrow.to_account_info(), to: ctx.accounts.buyer.to_account_info() },
+                Transfer {
+                    from: ctx.accounts.escrow.to_account_info(),
+                    to: ctx.accounts.buyer.to_account_info(),
+                },
                 &[seeds],
             ),
             p.lamports,
         )?;
         p.refunded = true;
-        emit_cpi!(Refunded { round: round_key, buyer: p.buyer, lamports: p.lamports });
+        emit_cpi!(Refunded {
+            round: round_key,
+            buyer: p.buyer,
+            lamports: p.lamports
+        });
         // The record closes with the refund (`close = buyer`), returning its rent to the buyer.
         Ok(())
     }
@@ -362,17 +472,28 @@ pub mod brink_sale {
             amount,
             r.decimals,
         )?;
-        emit_cpi!(CancelledWithdrawn { round: r.key(), destination: ctx.accounts.destination.key(), tokens: amount });
+        emit_cpi!(CancelledWithdrawn {
+            round: r.key(),
+            destination: ctx.accounts.destination.key(),
+            tokens: amount
+        });
         Ok(())
     }
 
     /// Step one of a hand-over: names the key that may accept the round (a timelock PDA or a governance key).
     /// Nothing changes until that key calls `accept_authority`; naming the zero key clears a pending hand-over.
     pub fn set_authority(ctx: Context<Authority>, new_authority: Pubkey) -> Result<()> {
-        require!(new_authority != ctx.accounts.round.authority, SaleError::ZeroKey);
+        require!(
+            new_authority != ctx.accounts.round.authority,
+            SaleError::ZeroKey
+        );
         let r = &mut ctx.accounts.round;
         r.pending_authority = new_authority;
-        emit_cpi!(AuthorityProposed { round: r.key(), from: r.authority, to: new_authority });
+        emit_cpi!(AuthorityProposed {
+            round: r.key(),
+            from: r.authority,
+            to: new_authority
+        });
         Ok(())
     }
 
@@ -383,7 +504,11 @@ pub mod brink_sale {
         let from = r.authority;
         r.authority = r.pending_authority;
         r.pending_authority = Pubkey::default();
-        emit_cpi!(AuthorityChanged { round: r.key(), from, to: r.authority });
+        emit_cpi!(AuthorityChanged {
+            round: r.key(),
+            from,
+            to: r.authority
+        });
         Ok(())
     }
 }
@@ -393,18 +518,34 @@ pub mod brink_sale {
 /// Token base units for `lamports` at `lamports_per_token` (lamports per whole token). Floors.
 pub fn tokens_for(lamports: u64, lamports_per_token: u64, decimals: u8) -> Result<u64> {
     require!(lamports_per_token > 0, SaleError::Price);
-    let unit = 10u128.checked_pow(u32::from(decimals)).ok_or(SaleError::Math)?;
-    let t = u128::from(lamports).checked_mul(unit).ok_or(SaleError::Math)?.checked_div(u128::from(lamports_per_token)).ok_or(SaleError::Math)?;
+    let unit = 10u128
+        .checked_pow(u32::from(decimals))
+        .ok_or(SaleError::Math)?;
+    let t = u128::from(lamports)
+        .checked_mul(unit)
+        .ok_or(SaleError::Math)?
+        .checked_div(u128::from(lamports_per_token))
+        .ok_or(SaleError::Math)?;
     u64::try_from(t).map_err(|_| error!(SaleError::Math))
 }
 
 /// Tokens unlocked at `now`: the TGE share, then the remainder linearly over `vest_seconds` from `tge_ts`.
-pub fn vested_amount(total: u64, tge_bps: u16, tge_ts: i64, vest_seconds: i64, now: i64) -> Result<u64> {
+pub fn vested_amount(
+    total: u64,
+    tge_bps: u16,
+    tge_ts: i64,
+    vest_seconds: i64,
+    now: i64,
+) -> Result<u64> {
     if now < tge_ts {
         return Ok(0);
     }
     let total128 = u128::from(total);
-    let tge = total128.checked_mul(u128::from(tge_bps)).ok_or(SaleError::Math)?.checked_div(u128::from(BPS)).ok_or(SaleError::Math)?;
+    let tge = total128
+        .checked_mul(u128::from(tge_bps))
+        .ok_or(SaleError::Math)?
+        .checked_div(u128::from(BPS))
+        .ok_or(SaleError::Math)?;
     if vest_seconds <= 0 {
         return u64::try_from(total128).map_err(|_| error!(SaleError::Math));
     }
@@ -415,8 +556,13 @@ pub fn vested_amount(total: u64, tge_bps: u16, tge_ts: i64, vest_seconds: i64, n
     let rest = total128.checked_sub(tge).ok_or(SaleError::Math)?;
     let elapsed_u = u128::try_from(elapsed).map_err(|_| error!(SaleError::Math))?;
     let vest_u = u128::try_from(vest_seconds).map_err(|_| error!(SaleError::Math))?;
-    let linear = rest.checked_mul(elapsed_u).ok_or(SaleError::Math)?.checked_div(vest_u).ok_or(SaleError::Math)?;
-    u64::try_from(tge.checked_add(linear).ok_or(SaleError::Math)?).map_err(|_| error!(SaleError::Math))
+    let linear = rest
+        .checked_mul(elapsed_u)
+        .ok_or(SaleError::Math)?
+        .checked_div(vest_u)
+        .ok_or(SaleError::Math)?;
+    u64::try_from(tge.checked_add(linear).ok_or(SaleError::Math)?)
+        .map_err(|_| error!(SaleError::Math))
 }
 
 /// Merkle membership: leaf = sha256(0x00 || address), node = sha256(0x01 || min || max).
@@ -774,7 +920,10 @@ mod tests {
     #[test]
     fn tokens_floor_and_fit() {
         // 1 SOL at 10_000 lamports per token with 9 decimals: 100_000 tokens.
-        assert_eq!(tokens_for(1_000_000_000, 10_000, 9).unwrap(), 100_000 * 1_000_000_000);
+        assert_eq!(
+            tokens_for(1_000_000_000, 10_000, 9).unwrap(),
+            100_000 * 1_000_000_000
+        );
         assert_eq!(tokens_for(15_000, 10_000, 9).unwrap(), 1_500_000_000);
         assert_eq!(tokens_for(1, 10_000, 9).unwrap(), 100_000);
         assert!(tokens_for(u64::MAX, 1, 9).is_err());
@@ -786,10 +935,22 @@ mod tests {
         let tge = 1_700_000_000;
         let vest = 60 * 86_400;
         assert_eq!(vested_amount(total, 2_500, tge, vest, tge - 1).unwrap(), 0);
-        assert_eq!(vested_amount(total, 2_500, tge, vest, tge).unwrap(), total / 4);
-        assert_eq!(vested_amount(total, 2_500, tge, vest, tge + vest / 2).unwrap(), total / 4 + (total - total / 4) / 2);
-        assert_eq!(vested_amount(total, 2_500, tge, vest, tge + vest).unwrap(), total);
-        assert_eq!(vested_amount(total, 2_500, tge, vest, tge + vest * 3).unwrap(), total);
+        assert_eq!(
+            vested_amount(total, 2_500, tge, vest, tge).unwrap(),
+            total / 4
+        );
+        assert_eq!(
+            vested_amount(total, 2_500, tge, vest, tge + vest / 2).unwrap(),
+            total / 4 + (total - total / 4) / 2
+        );
+        assert_eq!(
+            vested_amount(total, 2_500, tge, vest, tge + vest).unwrap(),
+            total
+        );
+        assert_eq!(
+            vested_amount(total, 2_500, tge, vest, tge + vest * 3).unwrap(),
+            total
+        );
         assert_eq!(vested_amount(total, 10_000, tge, 0, tge).unwrap(), total);
     }
 
@@ -799,7 +960,12 @@ mod tests {
         let b = Pubkey::new_unique();
         let la = hashv(&[&[0u8], a.as_ref()]).to_bytes();
         let lb = hashv(&[&[0u8], b.as_ref()]).to_bytes();
-        let root = if la <= lb { hashv(&[&[1u8], &la, &lb]) } else { hashv(&[&[1u8], &lb, &la]) }.to_bytes();
+        let root = if la <= lb {
+            hashv(&[&[1u8], &la, &lb])
+        } else {
+            hashv(&[&[1u8], &lb, &la])
+        }
+        .to_bytes();
         assert!(verify_allowlist(&root, &a, &[lb]));
         assert!(verify_allowlist(&root, &b, &[la]));
         assert!(!verify_allowlist(&root, &Pubkey::new_unique(), &[la]));

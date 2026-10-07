@@ -157,8 +157,9 @@ pub struct RefQuote {
 /// d      = ceil(notional · 10^4 / tvl)
 /// after  = before + sign(side) · d
 /// reduces = |after| ≤ |before|
-/// twice_avg = |before| + |after| if before = 0 or sign(before) = sign(after),
-///             else floor(|after|² / (|before| + |after|))        (external scan 1, L-23)
+/// s_before = before (pay) or −before (receive)
+/// twice_avg = max(0, 2 · s_before + d)       the signed trapezoid (after² − before²) / d
+///             (external scan 1, L-23, as amended by external scan 2, finding 19)
 /// demand  = 0 if reduces, else min(cap, round_half_up(k · twice_avg / (2 · 10^4)))
 ///
 /// Domain bounds stated by the SPEC: tvl > 0; util ≤ 10^4 each. `d` is clamped at 30 000 so `after` lies in
@@ -185,13 +186,12 @@ pub fn demand(
     let demand = if reduces {
         0
     } else {
-        let twice_avg = if before == 0 || (before < 0) == (after < 0) {
-            before.abs() + after.abs()
-        } else {
-            // Only the part of the fill beyond zero extends the book; its area |after|² / 2 is averaged over
-            // the whole fill |before| + |after| (L-23). Floored like the implementation.
-            after.abs() * after.abs() / (before.abs() + after.abs())
-        };
+        // Twice the average signed imbalance over the fill in the direction of the leg: the exact trapezoid of
+        // the imbalance from `before` to `after`, so the charge telescopes over any split of the fill (external
+        // scan 2, finding 19). Equal to |before| + |after| on one side of zero and |after| − |before| for a
+        // crossing fill that extends the book.
+        let s_before = side.sign() * before;
+        let twice_avg = (2 * s_before + d).max(0);
         let raw = Q::new(c.demand_k_bp * twice_avg, 2 * BP).round_half_up();
         raw.min(c.demand_cap_bp)
     };

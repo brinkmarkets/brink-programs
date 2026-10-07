@@ -111,6 +111,28 @@ pub enum BrinkError {
     ForwardAlreadyStarted,
     #[msg("swap is not a forward-starting swap")]
     NotForward,
+    #[msg("reserve parameters out of range")]
+    ReserveParams,
+    #[msg("the venue does not match the pool's settlement asset or its receipt mint")]
+    ReserveVenue,
+    #[msg("the pool has no reserve")]
+    ReserveInactive,
+    #[msg("the working balance is short of this payout; rebalance the reserve first")]
+    WorkingBalanceShort,
+    #[msg("the reserve is within its band and nothing accrued; nothing to move")]
+    ReserveBalanced,
+    #[msg("the forward's start has left the fixings record; settlement values it from the term itself")]
+    StartUnavailable,
+    #[msg("the pool's reserve accounts must be passed when the reserve is active")]
+    ReserveAccountsRequired,
+    #[msg("a queued calibration is still pending; cancel it or wait for it to apply")]
+    CalibrationPending,
+    #[msg("no calibration is queued")]
+    NoCalibrationPending,
+    #[msg("the hedge's fixed rate is below the series floor")]
+    HedgeRateFloor,
+    #[msg("the venue's index is behind its walk bound; touch the venue until current")]
+    VenueNeedsTouch,
 }
 
 impl From<vernier::VernierError> for BrinkError {

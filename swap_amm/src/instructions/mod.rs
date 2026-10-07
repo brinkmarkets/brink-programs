@@ -8,6 +8,7 @@ pub mod hooks;
 pub mod liquidity;
 pub mod math;
 pub mod queue;
+pub mod reserve;
 pub mod swap;
 
 pub use admin::*;
@@ -16,6 +17,7 @@ pub use fees::*;
 pub use forward::*;
 pub use liquidity::*;
 pub use queue::*;
+pub use reserve::*;
 pub use swap::*;
 #[cfg(test)]
 mod properties;
