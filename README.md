@@ -3,7 +3,9 @@
 The Solana programs behind Brink fixed-rate markets: Anchor programs (`anchor-lang` 1.2.0 as locked in `Cargo.lock`)
 for Solana 3.1.10.
 
-Status: deployed on devnet; `brink_sale` also runs on mainnet-beta. Audit in progress.
+Status: deployed on devnet; `brink_sale` also runs on mainnet-beta. Audit in progress. Source published at
+`https://github.com/brinkmarkets/brink-programs`; every deployed program carries an on-chain verification record that
+names this repository and the commit it was built from (`VERIFY.md`).
 
 ## Programs
 
@@ -31,3 +33,15 @@ executable hash of every deployed program, so anyone can rebuild a program and c
 
 `cargo test --workspace` runs the library and program unit tests. The on-chain suite and the simulation harness are
 described in `tests/README.md`.
+
+## Releases
+
+Deployed source trees are git tags: `programs-2026-10-05-sale` (`brink_sale` on mainnet-beta and devnet) and
+`programs-2026-10-07-round-12` (the seven protocol programs on devnet). `VERIFY.md` lists the commit, executable hash
+and on-chain record of each.
+
+## Licence
+
+Business Source License 1.1 (`LICENSE`): copying, modification and non-production use are permitted; production use
+needs a licence from Brink Markets until the change date, 7 October 2030, when the code becomes available under the
+GNU General Public License v2.0 or later.
